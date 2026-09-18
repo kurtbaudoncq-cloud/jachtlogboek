@@ -1,0 +1,2567 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Jachtlogboek</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --forest-950:#101c13;
+    --forest-900:#16241a;
+    --forest-800:#223324;
+    --forest-600:#3f5c3f;
+    --forest-500:#4a7c3f;
+    --parchment:#f2ede0;
+    --parchment-dim:#e5ddc7;
+    --ink:#1c1a15;
+    --ink-soft:#4a4638;
+    --paper-line:#cabf9e;
+    --blaze:#d94f04;
+    --blaze-dark:#b03e02;
+    --blue:#1e6fd9;
+    --danger:#a13327;
+    --ok:#3f7d3a;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    height:100%; margin:0; padding:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink); background:var(--forest-950);
+    overscroll-behavior:none;
+  }
+  h1,h2,h3{ font-family:inherit; font-weight:800; letter-spacing:-0.01em; margin:0; }
+  button{ font-family:inherit; }
+  #app{ position:fixed; inset:0; display:flex; flex-direction:column; }
+
+  .topbar{
+    background:var(--forest-900);
+    color:var(--parchment);
+    padding:calc(10px + var(--safe-top)) 16px 10px;
+    display:flex; align-items:center; justify-content:space-between;
+    z-index:500; box-shadow:0 2px 8px rgba(0,0,0,.35);
+  }
+  .topbar .brand{ display:flex; flex-direction:column; line-height:1.15; min-width:0; }
+  .topbar .brand .app-label{ font-size:10px; font-weight:600; color:var(--parchment-dim); opacity:.7; text-transform:uppercase; letter-spacing:.04em; }
+  .topbar .brand strong{ font-size:20px; font-weight:800; color:#e8c37a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .topbar .brand span{ font-size:11px; color:var(--parchment-dim); opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .topbar-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .icon-btn{
+    background:var(--forest-800); border:1px solid var(--forest-600); color:var(--parchment);
+    width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-size:18px; cursor:pointer; position:relative;
+  }
+  .icon-btn:active{ background:var(--forest-600); }
+  .icon-btn.recording{ background:var(--danger); border-color:var(--danger); animation:pulse 1.4s infinite; }
+  @keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(161,51,39,.55);} 70%{box-shadow:0 0 0 9px rgba(161,51,39,0);} 100%{box-shadow:0 0 0 0 rgba(161,51,39,0);} }
+
+  #map{ flex:1; min-height:0; background:#dedad0; }
+  .leaflet-container{ font-family:inherit; }
+
+  .track-badge{
+    position:absolute; top:calc(64px + var(--safe-top)); left:12px; right:12px; z-index:600;
+    background:rgba(161,51,39,.95); color:#fff; border-radius:12px; padding:9px 14px;
+    font-size:13px; font-weight:700; display:none; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .track-badge.show{ display:flex; }
+  .track-badge button{
+    background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.5); color:#fff;
+    border-radius:8px; padding:6px 10px; font-size:12px; font-weight:800; cursor:pointer;
+  }
+
+  .fab-bar{
+    position:absolute; left:0; right:0; bottom:0; z-index:500;
+    display:flex; align-items:flex-end; justify-content:space-between;
+    padding:0 16px calc(14px + var(--safe-bottom));
+    pointer-events:none;
+  }
+  .fab-bar > *{ pointer-events:auto; }
+  .pill-btn{
+    background:rgba(16,28,19,.92); color:var(--parchment); border:1px solid var(--forest-600);
+    border-radius:999px; padding:11px 16px; font-size:13px; font-weight:700;
+    display:flex; align-items:center; gap:6px; cursor:pointer; backdrop-filter:blur(3px);
+  }
+  .pill-btn:active{ background:var(--forest-800); }
+  .fab-main{
+    background:var(--blaze); color:#fff; border:none;
+    width:72px; height:72px; border-radius:50%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-size:11px; font-weight:800; letter-spacing:.02em;
+    box-shadow:0 6px 18px rgba(217,79,4,.55);
+    cursor:pointer; transform:translateY(-4px);
+  }
+  .fab-main .plus{ font-size:26px; line-height:1; margin-bottom:1px; }
+  .fab-main:active{ background:var(--blaze-dark); }
+
+  .float-stack{ position:absolute; right:12px; bottom:104px; z-index:500; display:flex; flex-direction:column; gap:10px; }
+  .float-btn{
+    background:rgba(16,28,19,.92); color:var(--parchment); border:1px solid var(--forest-600);
+    width:44px; height:44px; border-radius:12px; font-size:17px;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+
+  .wind-card{
+    position:absolute; top:calc(70px + var(--safe-top)); right:12px; z-index:600;
+    background:rgba(16,28,19,.94); color:var(--parchment); border:1px solid var(--forest-600);
+    border-radius:14px; padding:10px 14px; display:flex; align-items:center; gap:10px;
+    box-shadow:0 4px 14px rgba(0,0,0,.3);
+  }
+  .wind-card.show{ display:flex !important; }
+  .wind-arrow{ font-size:30px; line-height:1; display:inline-block; transition:transform .4s ease; }
+  .wind-text{ display:flex; flex-direction:column; line-height:1.25; }
+  .wind-text strong{ font-size:15px; }
+  .wind-text span{ font-size:11px; color:var(--parchment-dim); }
+
+  .overlay-controls{
+    position:absolute; left:12px; right:12px; bottom:calc(96px + var(--safe-bottom)); z-index:650;
+    background:rgba(16,28,19,.95); color:var(--parchment); border:1px solid var(--forest-600);
+    border-radius:14px; padding:14px; box-shadow:0 6px 18px rgba(0,0,0,.35);
+  }
+  .overlay-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-size:13px; }
+  .overlay-row input[type=range]{ flex:1; margin-left:10px; }
+  .overlay-controls .btn-row{ margin-top:0; }
+
+  .search-result{
+    background:#fff; border:1px solid var(--paper-line); border-radius:10px; padding:10px 12px;
+    margin-bottom:6px; font-size:13.5px; cursor:pointer;
+  }
+  .search-result:active{ background:var(--parchment-dim); }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(16,20,14,.55); z-index:2000;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .modal-box{
+    background:var(--parchment); border-radius:16px; padding:22px; max-width:360px; width:100%;
+    box-shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+
+  .gebied-quick-switch{
+    position:absolute; top:calc(64px + var(--safe-top)); left:12px; z-index:700;
+    background:rgba(16,28,19,.96); border:1px solid var(--forest-600); border-radius:14px;
+    padding:12px; width:260px; box-shadow:0 8px 20px rgba(0,0,0,.35);
+  }
+  .gebied-quick-item{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    background:rgba(255,255,255,.06); border-radius:9px; padding:9px 11px; margin-bottom:6px;
+    color:var(--parchment); font-size:13.5px; font-weight:600; cursor:pointer;
+  }
+  .gebied-quick-item.active{ background:var(--blaze); color:#fff; }
+  .gebied-quick-item:active{ opacity:.85; }
+
+  /* bottom sheets */
+  .sheet-overlay{
+    position:fixed; inset:0; background:rgba(16,20,14,.45); z-index:900;
+    opacity:0; pointer-events:none; transition:opacity .18s ease;
+  }
+  .sheet-overlay.open{ opacity:1; pointer-events:auto; }
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; z-index:950;
+    background:var(--parchment); border-radius:18px 18px 0 0;
+    box-shadow:0 -8px 24px rgba(0,0,0,.3);
+    max-height:88vh; overflow-y:auto;
+    transform:translateY(102%); transition:transform .22s ease;
+    padding:18px 18px calc(22px + var(--safe-bottom));
+  }
+  .sheet.open{ transform:translateY(0); }
+  .sheet-handle{ width:38px; height:4px; background:var(--paper-line); border-radius:3px; margin:0 auto 14px; }
+  .sheet h2{ font-size:20px; margin-bottom:4px; }
+  .sheet .subtitle{ font-size:13px; color:var(--ink-soft); margin-bottom:16px; }
+  .back-row{ display:flex; align-items:center; gap:10px; margin-bottom:2px; }
+  .back-row .icon-btn{ width:34px; height:34px; font-size:15px; }
+
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:12px; font-weight:700; color:var(--ink-soft); margin-bottom:6px; }
+  select, textarea, input[type=text]{
+    width:100%; border:1.5px solid var(--paper-line); background:#fff; border-radius:10px;
+    padding:11px 12px; font-size:15px; color:var(--ink); font-family:inherit;
+  }
+  textarea{ resize:vertical; min-height:64px; }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    border-radius:11px; padding:13px 16px; font-size:15px; font-weight:700;
+    border:none; cursor:pointer; width:100%;
+  }
+  .btn-primary{ background:var(--blaze); color:#fff; }
+  .btn-primary:active{ background:var(--blaze-dark); }
+  .btn-secondary{ background:var(--forest-800); color:var(--parchment); }
+  .btn-secondary:active{ background:var(--forest-600); }
+  .btn-outline{ background:transparent; color:var(--ink); border:1.5px solid var(--paper-line); }
+  .btn-outline:active{ background:var(--parchment-dim); }
+  .btn-danger{ background:transparent; color:var(--danger); border:1.5px solid var(--danger); }
+  .btn-ghost{ background:transparent; color:var(--ink-soft); font-weight:600; }
+  .btn-row{ display:flex; gap:10px; margin-top:6px; }
+  .btn-row .btn{ flex:1; }
+
+  .chip-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
+  .chip{
+    border:1.5px solid var(--paper-line); background:#fff; border-radius:10px;
+    padding:10px 4px; font-size:12.5px; text-align:center; cursor:pointer; font-weight:600; color:var(--ink);
+  }
+  .chip.active{ background:var(--forest-500); border-color:var(--forest-500); color:#fff; }
+
+  .toggle-row{ display:flex; gap:8px; margin-bottom:14px; }
+  .toggle-row .chip{ flex:1; }
+
+  .gps-box{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:#fff; border:1.5px solid var(--paper-line); border-radius:10px; padding:10px 12px; margin-bottom:14px;
+  }
+  .gps-box .txt{ font-size:13px; line-height:1.35; }
+  .gps-box .txt strong{ display:block; font-size:14px; }
+  .badge{ font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  .badge-in{ background:#e4f0e0; color:var(--ok); }
+  .badge-out{ background:#f7e3d8; color:var(--blaze-dark); }
+  .badge-unk{ background:#eee; color:#777; }
+
+  .photo-area{ margin-bottom:14px; }
+  .photo-drop{
+    border:2px dashed var(--paper-line); border-radius:12px; padding:22px 10px; text-align:center;
+    color:var(--ink-soft); font-size:13px; cursor:pointer; background:#fbf9f3;
+  }
+  .photo-preview{ position:relative; border-radius:12px; overflow:hidden; }
+  .photo-preview img{ width:100%; display:block; max-height:260px; object-fit:cover; }
+  .photo-preview .remove{
+    position:absolute; top:8px; right:8px; background:rgba(16,28,19,.75); color:#fff;
+    border:none; width:30px; height:30px; border-radius:50%; font-size:15px; cursor:pointer;
+  }
+
+  .list-card{
+    display:flex; gap:12px; background:#fff; border:1px solid var(--paper-line);
+    border-radius:12px; padding:10px; margin-bottom:10px; align-items:center;
+  }
+  .list-card .thumb{ width:52px; height:52px; border-radius:9px; object-fit:cover; background:var(--parchment-dim); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .list-card .info{ flex:1; min-width:0; }
+  .list-card .info .top{ display:flex; align-items:center; gap:8px; }
+  .list-card .info .title{ font-weight:700; font-size:14.5px; }
+  .list-card .info .meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .list-card .info .note{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .list-actions{ display:flex; flex-direction:column; gap:6px; }
+  .list-actions button{ border:none; background:none; font-size:16px; color:var(--ink-soft); cursor:pointer; padding:4px; }
+
+  .empty-state{ text-align:center; padding:34px 10px; color:var(--ink-soft); }
+  .empty-state .emoji{ font-size:34px; margin-bottom:8px; }
+
+  .toast{
+    position:fixed; left:50%; bottom:calc(96px + var(--safe-bottom)); transform:translateX(-50%);
+    background:var(--forest-900); color:var(--parchment); padding:10px 18px; border-radius:999px;
+    font-size:13px; font-weight:600; z-index:1200; opacity:0; pointer-events:none; transition:opacity .2s ease;
+    max-width:86vw; text-align:center;
+  }
+  .toast.show{ opacity:1; }
+
+  .draw-banner{
+    position:absolute; top:calc(64px + var(--safe-top)); left:12px; right:12px; z-index:600;
+    background:rgba(16,28,19,.94); color:var(--parchment); border-radius:12px; padding:10px 14px;
+    font-size:13px; display:none; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .draw-banner.show{ display:flex; }
+  .draw-banner .actions{ display:flex; gap:8px; }
+  .draw-banner button{
+    background:var(--forest-800); border:1px solid var(--forest-600); color:var(--parchment);
+    border-radius:8px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .draw-banner button.done{ background:var(--blaze); border-color:var(--blaze); }
+
+  .file-hidden{ display:none; }
+  .divider{ height:1px; background:var(--paper-line); margin:16px 0; opacity:.7; }
+  .hint{ font-size:12px; color:var(--ink-soft); line-height:1.5; }
+
+  .menu-list{ display:flex; flex-direction:column; gap:8px; }
+  .menu-item{
+    display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--paper-line);
+    border-radius:12px; padding:14px 14px; font-size:15px; font-weight:700; color:var(--ink);
+    cursor:pointer; text-align:left; width:100%;
+  }
+  .menu-item:active{ background:var(--parchment-dim); }
+  .menu-item .emoji{ font-size:20px; width:26px; text-align:center; }
+  .menu-item .sub{ font-size:12px; font-weight:500; color:var(--ink-soft); margin-top:1px; }
+  .menu-item .col{ flex:1; min-width:0; }
+
+  .weather-now{
+    display:flex; align-items:center; gap:14px; background:#fff; border:1px solid var(--paper-line);
+    border-radius:14px; padding:16px; margin-bottom:14px;
+  }
+  .weather-now .icon{ font-size:40px; }
+  .weather-now .temp{ font-size:28px; font-weight:800; }
+  .weather-now .desc{ font-size:13px; color:var(--ink-soft); }
+  .weather-days{ display:flex; gap:8px; overflow-x:auto; margin-bottom:16px; padding-bottom:2px; }
+  .weather-day{
+    flex:0 0 auto; width:72px; background:#fff; border:1px solid var(--paper-line); border-radius:12px;
+    padding:10px 6px; text-align:center;
+  }
+  .weather-day .d{ font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:capitalize; }
+  .weather-day .i{ font-size:20px; margin:4px 0; }
+  .weather-day .t{ font-size:12px; font-weight:700; }
+  .weather-day .t span{ color:var(--ink-soft); font-weight:500; }
+
+  .sun-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .sun-card{ background:#fff; border:1px solid var(--paper-line); border-radius:12px; padding:12px; }
+  .sun-card .label{ font-size:11px; font-weight:700; color:var(--ink-soft); }
+  .sun-card .value{ font-size:16px; font-weight:800; margin-top:3px; }
+  .best-times{ background:var(--forest-800); color:var(--parchment); border-radius:12px; padding:14px; margin-bottom:8px; }
+  .best-times .t{ font-size:13px; font-weight:800; margin-bottom:6px; }
+  .best-times .row{ font-size:13px; display:flex; justify-content:space-between; margin-top:4px; }
+  .best-times .row b{ color:#e8c37a; }
+
+  .tableau-row{ display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid var(--paper-line); border-radius:10px; padding:11px 14px; margin-bottom:8px; }
+  .tableau-row .species{ font-weight:700; font-size:14.5px; }
+  .tableau-row .count{ font-weight:800; font-size:17px; color:var(--forest-500); }
+  .tableau-total{ display:flex; justify-content:space-between; background:var(--forest-800); color:var(--parchment); border-radius:10px; padding:13px 14px; margin-top:10px; font-weight:800; font-size:15px; }
+
+  .stepper-row{ display:flex; align-items:center; justify-content:space-between; background:#fff; border:1px solid var(--paper-line); border-radius:10px; padding:9px 12px; margin-bottom:8px; }
+  .stepper-row .species{ font-weight:600; font-size:14.5px; }
+  .stepper-controls{ display:flex; align-items:center; gap:12px; }
+  .stepper-btn{ width:30px; height:30px; border-radius:8px; border:1px solid var(--paper-line); background:#fbf9f3; font-size:18px; font-weight:700; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink); }
+  .stepper-btn:active{ background:var(--parchment-dim); }
+  .stepper-value{ min-width:22px; text-align:center; font-weight:800; font-size:15px; }
+
+  .quick-actions{ display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+  .quick-actions .menu-item{ background:var(--blaze); color:#fff; border-color:var(--blaze); }
+  .quick-actions .menu-item .sub{ color:rgba(255,255,255,.8); }
+
+  @media (min-width:900px){
+    .fab-bar{ display:none; }
+    .draw-banner, .track-badge{ left:316px; right:20px; }
+    .sheet{
+      top:62px; bottom:0; left:auto; right:0; width:400px; max-height:none; height:auto;
+      border-radius:16px 0 0 16px; transform:translateX(102%);
+      box-shadow:-8px 0 24px rgba(0,0,0,.25);
+    }
+    .sheet.open{ transform:translateX(0); }
+    .sheet .sheet-handle{ display:none; }
+    #sheetMenu{
+      left:0; right:auto; width:300px; transform:none !important;
+      border-radius:0 16px 16px 0; box-shadow:8px 0 24px rgba(0,0,0,.2);
+    }
+    #map{ margin-left:300px; }
+    .sheet-overlay{ left:300px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="app-label">Jachtlogboek</span>
+      <strong id="gebiedNameDisplay" style="cursor:pointer;">Geen jachtgebied</strong>
+      <span id="zoneLabel"></span>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btnRecord" title="Spoor opnemen">⏺</button>
+    </div>
+  </div>
+
+  <div class="gebied-quick-switch" id="gebiedQuickSwitch" style="display:none;">
+    <div class="hint" style="color:var(--parchment-dim); margin-bottom:8px;">Wissel van jachtgebied</div>
+    <div id="gebiedQuickList"></div>
+    <button class="btn btn-outline" id="btnQuickManageGebieden" style="margin-top:8px;">⚙️ Jachtgebieden beheren</button>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="track-badge" id="trackBadge">
+    <span id="trackBadgeTxt">00:00 · 0,0 km</span>
+    <button id="btnStopTrack">Stop spoor</button>
+  </div>
+
+  <div class="draw-banner" id="drawBanner">
+    <span id="drawBannerTxt">Tik op de kaart om de grens te tekenen</span>
+    <div class="actions">
+      <button id="drawUndo">↩️ Ongedaan maken</button>
+      <button id="drawCancel">Annuleer</button>
+      <button class="done" id="drawFinish">Klaar</button>
+    </div>
+  </div>
+
+  <div class="float-stack">
+    <button class="float-btn" id="btnLayer" title="Kaartlaag wisselen">🛰️</button>
+    <button class="float-btn" id="btnLocate" title="Mijn locatie">◎</button>
+    <button class="float-btn" id="btnWind" title="Windrichting">🧭</button>
+  </div>
+
+  <div class="wind-card" id="windCard" style="display:none;">
+    <span class="wind-arrow" id="windArrow">↑</span>
+    <div class="wind-text">
+      <strong id="windSpeedText">–</strong>
+      <span id="windDirText">–</span>
+    </div>
+  </div>
+
+  <div class="overlay-controls" id="overlayControls" style="display:none;">
+    <div class="overlay-row">
+      <span>Doorzichtigheid</span>
+      <input type="range" id="overlayOpacity" min="10" max="100" value="70">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-outline" id="btnRemoveOverlay">Verwijder</button>
+      <button class="btn btn-primary" id="btnDoneOverlay">✓ Klaar — begin tekenen</button>
+    </div>
+    <div class="hint" style="margin-top:8px; color:var(--parchment-dim);">Versleep de twee ronde punten om je foto uit te lijnen met de echte kaart eronder.</div>
+  </div>
+
+  <div class="fab-bar">
+    <button class="pill-btn" id="btnAddMarker">📍 Marker</button>
+    <button class="fab-main" id="btnAddWild"><span class="plus">＋</span>Wild</button>
+    <button class="pill-btn" id="btnMenu">☰ Meer</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal-overlay" id="confirmModalOverlay" style="display:none;">
+    <div class="modal-box">
+      <div id="confirmModalMessage" style="margin-bottom:18px; font-size:15px; line-height:1.45; color:var(--ink); white-space:pre-line;"></div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="confirmModalCancel">Annuleren</button>
+        <button class="btn" id="confirmModalOk" style="background:var(--danger); color:#fff; flex:1;">Bevestigen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-overlay" id="overlay"></div>
+
+  <!-- MAIN MENU -->
+  <div class="sheet" id="sheetMenu">
+    <div class="sheet-handle"></div>
+    <h2>Menu</h2>
+    <div class="subtitle">Alles op een rijtje</div>
+    <div class="quick-actions">
+      <button class="menu-item" id="btnQuickWild"><span class="emoji">🦌</span><span class="col">Wild registreren</span></button>
+      <button class="menu-item" id="btnQuickMarker"><span class="emoji">📍</span><span class="col">Marker toevoegen</span></button>
+    </div>
+    <div class="menu-list">
+      <button class="menu-item" data-open="wild"><span class="emoji">🦌</span><span class="col">Wildregistraties<div class="sub">Geschoten wild met foto en locatie</div></span></button>
+      <button class="menu-item" data-open="markers"><span class="emoji">📍</span><span class="col">Markeringen<div class="sub">Hoogzit, voederplaats, parking, ...</div></span></button>
+      <button class="menu-item" data-open="tracks"><span class="emoji">🥾</span><span class="col">Sporen<div class="sub">Bewaarde looproutes</div></span></button>
+      <button class="menu-item" data-open="weather"><span class="emoji">☀️</span><span class="col">Weer &amp; zon/maan<div class="sub">Beste momenten om te jagen</div></span></button>
+      <button class="menu-item" data-open="boundary"><span class="emoji">📐</span><span class="col">Jachtgebied grens<div class="sub">Tekenen of importeren</div></span></button>
+      <button class="menu-item" data-open="tableau"><span class="emoji">📊</span><span class="col">Tableau<div class="sub">Aantallen per soort</div></span></button>
+      <button class="menu-item" data-open="data"><span class="emoji">⇅</span><span class="col">Data<div class="sub">Back-up maken of terugzetten</div></span></button>
+    </div>
+  </div>
+
+  <!-- Boundary sheet -->
+  <div class="sheet" id="sheetBoundary">
+    <div class="sheet-handle"></div>
+    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <h2>Jachtgebied grens</h2>
+    <div class="subtitle">Teken de grens zelf, of importeer een bestaand plan.</div>
+    <div class="field">
+      <label>Actief jachtgebied</label>
+      <select id="gebiedSelect"></select>
+    </div>
+    <div class="btn-row" style="margin-bottom:10px;">
+      <button class="btn btn-outline" id="btnNewGebied">➕ Nieuw</button>
+      <button class="btn btn-outline" id="btnRenameGebied">✏️ Naam wijzigen</button>
+    </div>
+    <div class="field" id="gebiedNameEditArea" style="display:none;">
+      <input type="text" id="gebiedNameInput" placeholder="Naam van het jachtgebied">
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-ghost" id="btnCancelGebiedName">Annuleren</button>
+        <button class="btn btn-primary" id="btnConfirmGebiedName">Bewaren</button>
+      </div>
+    </div>
+    <button class="btn btn-secondary" id="btnToggleLock" style="margin-bottom:14px;">🔒 Vergrendelen</button>
+    <div class="hint" id="gebiedLockHint" style="margin-bottom:14px; display:none; color:var(--blaze-dark); font-weight:600;">
+      🔒 Dit jachtgebied is vergrendeld. Ontgrendel eerst om te tekenen, importeren of wissen.
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-secondary" id="btnLocationSearch" style="margin-bottom:10px;">🔍 Zoek locatie op de kaart</button>
+    <div class="field" id="locationSearchArea" style="display:none;">
+      <div class="row" style="gap:8px;">
+        <input type="text" id="locationSearchInput" placeholder="Bv. Brechin, Schotland">
+        <button class="btn btn-secondary" id="btnDoLocationSearch" style="width:auto; padding:11px 16px;">Zoek</button>
+      </div>
+      <div id="locationSearchResults" style="margin-top:10px;"></div>
+    </div>
+    <button class="btn btn-secondary" id="btnOverlayMap" style="margin-bottom:10px;">🖼️ Kaart overleggen om na te tekenen</button>
+    <input type="file" id="fileOverlayImage" class="file-hidden" accept="image/*">
+    <div class="hint" style="margin-bottom:14px;">
+      Upload een foto of schermafbeelding van je papieren kaart. Voor een PDF: maak eerst een schermafbeelding van de kaartpagina.
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-secondary" id="btnToggleOfficial" style="margin-bottom:10px;">🗺️ Bekijk officiële jachtterreinen (opent Geopunt)</button>
+    <button class="btn btn-secondary" id="btnImportOfficial" style="margin-bottom:10px;">📍 Importeer mijn jachtterrein (tik op kaart)</button>
+    <div class="hint" style="margin-bottom:14px;">
+      Gebruikt de gratis, officiële dienst van Digitaal Vlaanderen (goedgekeurde jachtplannen). Tik na het indrukken van de knop op een plek binnen jouw jachtterrein op de kaart.
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-secondary" id="btnStartDraw" style="margin-bottom:10px;">✏️ Grens zelf tekenen op kaart</button>
+    <button class="btn btn-outline" id="btnImportBoundary" style="margin-bottom:10px;">📂 Importeer KML / KMZ / GeoJSON</button>
+    <input type="file" id="fileImportBoundary" class="file-hidden" accept=".kml,.kmz,.geojson,.json">
+    <div class="hint" style="margin-bottom:14px;">
+      Tip: exporteer je gebied in Google My Maps via <em>⋮ → Exporteren naar KML/KMZ</em> en importeer dat bestand hier — zowel .kml als het standaard, ingepakte .kmz-bestand werken.
+    </div>
+    <div class="divider"></div>
+    <div id="zonesListEl" style="margin-bottom:14px;"></div>
+    <button class="btn btn-outline" id="btnUndoZone" style="margin-bottom:16px;">↩️ Laatst toegevoegde zone verwijderen</button>
+    <button class="btn btn-secondary" id="btnExportKML" style="margin-bottom:16px;">⬇️ Exporteer grens naar KML</button>
+    <div class="divider"></div>
+    <div class="hint" style="margin-bottom:8px;">Onderstaande knop verwijdert je volledige jachtgebied (alle zones ineens) — niet te herstellen.</div>
+    <button class="btn btn-danger" id="btnClearBoundary">🗑️ Volledige grens verwijderen</button>
+  </div>
+
+  <!-- Add wild sheet -->
+  <div class="sheet" id="sheetWild">
+    <div class="sheet-handle"></div>
+    <h2>Wild registreren</h2>
+    <div class="subtitle">Positie wordt automatisch opgehaald, of kies zelf een plek voor historische invoer.</div>
+
+    <div class="toggle-row">
+      <div class="chip active" id="wildModeHere">Huidige locatie</div>
+      <div class="chip" id="wildModeMap">Kies plek op kaart</div>
+    </div>
+
+    <div class="gps-box">
+      <div class="txt">
+        <strong id="gpsCoords">Positie ophalen…</strong>
+        <span id="gpsAccuracy"></span>
+      </div>
+      <span class="badge badge-unk" id="gpsBadge">…</span>
+    </div>
+
+    <div class="field">
+      <label>Datum</label>
+      <input type="date" id="wildDate">
+    </div>
+
+    <div class="field">
+      <label>Soort wild</label>
+      <div class="chip-grid" id="speciesGrid"></div>
+      <input type="text" id="speciesOther" placeholder="Andere soort (optioneel)">
+    </div>
+
+    <div class="field photo-area">
+      <label>Foto</label>
+      <div id="photoDrop" class="photo-drop">📷 Foto toevoegen (camera of bestand)</div>
+      <input type="file" id="filePhoto" class="file-hidden" accept="image/*" capture="environment">
+    </div>
+
+    <div class="field">
+      <label>Notitie (optioneel)</label>
+      <textarea id="wildNote" placeholder="Bv. leeftijd, geslacht, gewicht, omstandigheden..."></textarea>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="btnCancelWild">Annuleren</button>
+      <button class="btn btn-primary" id="btnSaveWild">Bewaren</button>
+    </div>
+  </div>
+
+  <!-- Wild list -->
+  <div class="sheet" id="sheetWildList">
+    <div class="sheet-handle"></div>
+    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <h2>Wildregistraties</h2>
+    <div class="subtitle" id="wildListSubtitle">0 registraties</div>
+    <div id="wildListEl"></div>
+  </div>
+
+  <!-- Add marker sheet -->
+  <div class="sheet" id="sheetMarker">
+    <div class="sheet-handle"></div>
+    <h2>Markering toevoegen</h2>
+    <div class="subtitle">Voor hoogzit, voederplaats, parking en meer.</div>
+
+    <div class="toggle-row">
+      <div class="chip active" id="markerModeHere">Op huidige locatie</div>
+      <div class="chip" id="markerModeMap">Kies plek op kaart</div>
+    </div>
+
+    <div class="gps-box">
+      <div class="txt">
+        <strong id="markerCoords">Positie ophalen…</strong>
+        <span id="markerAccuracy"></span>
+      </div>
+      <span class="badge badge-unk" id="markerBadge">…</span>
+    </div>
+
+    <div class="field">
+      <label>Type markering</label>
+      <div class="chip-grid" id="markerTypeGrid"></div>
+      <div class="row" style="gap:8px;">
+        <input type="text" id="newMarkerTypeInput" placeholder="Ander type (bv. Frigocel)" style="flex:1;">
+        <button class="btn btn-secondary" id="btnAddMarkerType" style="width:auto; padding:11px 16px;">+</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Notitie (optioneel)</label>
+      <textarea id="markerNote" placeholder="Bv. richting, hoogte, merk camera..."></textarea>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="btnCancelMarker">Annuleren</button>
+      <button class="btn btn-primary" id="btnSaveMarker">Bewaren</button>
+    </div>
+  </div>
+
+  <!-- Markers list -->
+  <div class="sheet" id="sheetMarkersList">
+    <div class="sheet-handle"></div>
+    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <h2>Markeringen</h2>
+    <div class="subtitle" id="markersListSubtitle">0 markeringen</div>
+    <div id="markersListEl"></div>
+  </div>
+
+  <!-- Tracks list -->
+  <div class="sheet" id="sheetTracks">
+    <div class="sheet-handle"></div>
+    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <h2>Sporen</h2>
+    <div class="subtitle" id="tracksSubtitle">0 sporen bewaard</div>
+    <div class="hint" style="margin-bottom:14px;">Start een nieuw spoor met de ⏺ knop bovenaan het scherm.</div>
+    <div id="tracksListEl"></div>
+  </div>
+
+  <!-- Weather / sun-moon sheet -->
+  <div class="sheet" id="sheetWeather">
+    <div class="sheet-handle"></div>
+    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <h2>Weer &amp; zon/maan</h2>
+    <div class="subtitle" id="weatherLocLabel">Op basis van je huidige locatie</div>
+    <div id="weatherContent"><div class="hint">Gegevens ophalen…</div></div>
+  </div>
+
+  <!-- Data sheet -->
+  <div class="sheet" id="sheetData">
+    <div class="sheet-handle"></div>
+    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <h2>Data</h2>
+    <div class="subtitle">Alles blijft standaard lokaal op dit toestel.</div>
+    <button class="btn btn-secondary" id="btnExport" style="margin-bottom:10px;">⇩ Back-up downloaden</button>
+    <button class="btn btn-outline" id="btnImport">⇧ Back-up terugzetten</button>
+    <input type="file" id="fileImportData" class="file-hidden" accept=".json">
+    <div class="hint" style="margin-top:14px;">
+      De back-up bevat je jachtgebied, wildregistraties (incl. foto's), markeringen en sporen. Bewaar dit bestand ergens veilig — als je de browser-cache wist, gaat lokale data verloren.
+    </div>
+  </div>
+
+  <!-- Tableau overview sheet -->
+  <div class="sheet" id="sheetTableau">
+    <div class="sheet-handle"></div>
+    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <h2>Tableau</h2>
+    <div class="subtitle" id="tableauSubtitle">Aantallen per soort</div>
+    <div class="btn-row" style="margin-bottom:14px;">
+      <button class="btn btn-primary" id="btnAddTableau">➕ Tableau invullen (jachtdag)</button>
+    </div>
+    <button class="btn btn-outline" id="btnEditTableauSpecies" style="margin-bottom:14px;">⚙️ Soorten voor jouw jachtplan aanpassen</button>
+    <div class="toggle-row" id="tableauPeriodChips">
+      <div class="chip active" data-period="current">Dit seizoen</div>
+      <div class="chip" data-period="all">Alles</div>
+    </div>
+    <select id="tableauSeasonSelect" style="margin-bottom:14px; display:none;"></select>
+    <div id="tableauContent"></div>
+    <div class="divider"></div>
+    <h2 style="font-size:16px;">Ingevoerde jachtdagen</h2>
+    <div id="tableauDaysList" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- Tableau species config sheet -->
+  <div class="sheet" id="sheetTableauSpecies">
+    <div class="sheet-handle"></div>
+    <h2>Soorten voor tableau</h2>
+    <div class="subtitle">Kies welke soorten in jouw jachtplan zitten — enkel die verschijnen in het invulformulier.</div>
+    <div class="chip-grid" id="tableauSpeciesConfigGrid" style="grid-template-columns:repeat(2,1fr);"></div>
+    <div class="field">
+      <label>Andere soort toevoegen</label>
+      <div class="row" style="gap:8px;">
+        <input type="text" id="tableauNewSpeciesInput" placeholder="Naam soort" style="flex:1;">
+        <button class="btn btn-secondary" id="btnAddTableauSpecies" style="width:auto; padding:11px 16px;">+</button>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="btnCancelTableauSpecies">Annuleren</button>
+      <button class="btn btn-primary" id="btnSaveTableauSpecies">Bewaren</button>
+    </div>
+  </div>
+
+  <!-- Tableau add-entry sheet -->
+  <div class="sheet" id="sheetTableauAdd">
+    <div class="sheet-handle"></div>
+    <h2>Tableau invullen</h2>
+    <div class="subtitle">Aantallen kleinwild van de jachtdag</div>
+    <div class="field">
+      <label>Datum</label>
+      <input type="date" id="tableauDate">
+    </div>
+    <div id="tableauSpeciesRows"></div>
+    <div class="field">
+      <label>Andere soort (optioneel)</label>
+      <div class="row" style="gap:8px;">
+        <input type="text" id="tableauOtherSpecies" placeholder="Naam soort" style="flex:1.6;">
+        <input type="number" id="tableauOtherCount" min="0" placeholder="Aantal" style="flex:1;">
+      </div>
+    </div>
+    <div class="field photo-area">
+      <label>Foto (optioneel)</label>
+      <div id="tableauPhotoDrop" class="photo-drop">📷 Foto toevoegen (bv. groepsfoto van het tableau)</div>
+      <input type="file" id="tableauFilePhoto" class="file-hidden" accept="image/*" capture="environment">
+    </div>
+    <div class="field">
+      <label>Notitie (optioneel)</label>
+      <textarea id="tableauNote" placeholder="Bv. weersomstandigheden, aantal jagers..."></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="btnCancelTableau">Annuleren</button>
+      <button class="btn btn-primary" id="btnSaveTableau">Bewaren</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- IndexedDB helper ---------- */
+  const DB_NAME = "jachtlogboek";
+  const DB_VERSION = 3;
+  let dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains("entries")) db.createObjectStore("entries", { keyPath: "id", autoIncrement: true });
+      if (!db.objectStoreNames.contains("settings")) db.createObjectStore("settings", { keyPath: "key" });
+      if (!db.objectStoreNames.contains("markers")) db.createObjectStore("markers", { keyPath: "id", autoIncrement: true });
+      if (!db.objectStoreNames.contains("tracks")) db.createObjectStore("tracks", { keyPath: "id", autoIncrement: true });
+      if (!db.objectStoreNames.contains("tableaus")) db.createObjectStore("tableaus", { keyPath: "id", autoIncrement: true });
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+
+  function idbTx(storeName, mode) {
+    return dbPromise.then(db => db.transaction(storeName, mode).objectStore(storeName));
+  }
+  function idbAdd(storeName, value) {
+    return idbTx(storeName, "readwrite").then(store => new Promise((res, rej) => {
+      const r = store.add(value);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    }));
+  }
+  function idbPut(storeName, value) {
+    return idbTx(storeName, "readwrite").then(store => new Promise((res, rej) => {
+      const r = store.put(value);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    }));
+  }
+  function idbGet(storeName, key) {
+    return idbTx(storeName, "readonly").then(store => new Promise((res, rej) => {
+      const r = store.get(key);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    }));
+  }
+  function idbGetAll(storeName) {
+    return idbTx(storeName, "readonly").then(store => new Promise((res, rej) => {
+      const r = store.getAll();
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    }));
+  }
+  function idbDelete(storeName, key) {
+    return idbTx(storeName, "readwrite").then(store => new Promise((res, rej) => {
+      const r = store.delete(key);
+      r.onsuccess = () => res();
+      r.onerror = () => rej(r.error);
+    }));
+  }
+
+  /* ---------- State ---------- */
+  let boundaryLatLngs = null;
+  let jachtgebieden = [];
+  let activeGebiedId = null;
+  let boundaryLayer = null;
+  let entries = [];
+  let markers = [];
+  let tracks = [];
+  let tableaus = [];
+  const tableauFormCounts = {};
+  let entryMarkers = {};
+  let markerMarkers = {};
+  let pendingPhotoBlob = null;
+  let pendingCoords = null;
+  let selectedSpecies = null;
+  let selectedMarkerType = null;
+  let markerMode = 'here'; // 'here' | 'map'
+  let markerPendingCoords = null;
+  let drawingActive = false;
+  let drawPoints = [];
+  let draftLine = null;
+  let drawLayer = null;
+  let userMarker = null;
+  let shownTrackLayer = null;
+
+  const SPECIES = ["Ree","Wild zwijn","Vos","Fazant","Haas","Konijn","Eend","Houtduif"];
+  const MARKER_TYPES = [
+    { key:'hoogzit', label:'Hoogzit', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21 10 6M18 21 14 6M8.5 13h7M10 6h4"/></svg>' },
+    { key:'voeder', label:'Voederplaats', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M5 12c0 4.5 2.2 7 7 7s7-2.5 7-7"/><circle cx="9" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="7" r="1" fill="currentColor" stroke="none"/></svg>' },
+    { key:'parking', label:'Parking', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M10 16V8h3.2a2.4 2.4 0 0 1 0 4.8H10"/></svg>' },
+    { key:'camera', label:'Wildcamera', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.1"/></svg>' },
+    { key:'ingang', label:'Ingang', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a1 1 0 0 1 1-1h5v17M10 21h9M17 21V8l-7-4"/></svg>' },
+    { key:'overig', label:'Overig', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.2"/></svg>' }
+  ];
+
+  /* ---------- Map setup ---------- */
+  const map = L.map('map', { zoomControl:false, attributionControl:true }).setView([50.98, 3.62], 13);
+
+  const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap-bijdragers'
+  }).addTo(map);
+
+  const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: 'Tiles &copy; Esri'
+  });
+  let satTileErrorShown = false;
+  satLayer.on('tileerror', () => {
+    if (!satTileErrorShown) { satTileErrorShown = true; toast('Kon satellietbeelden niet laden (netwerk of dienst niet bereikbaar)'); }
+  });
+  satLayer.on('tileload', () => { satTileErrorShown = false; });
+
+  L.control.zoom({ position:'bottomleft' }).addTo(map);
+
+  let satActive = false;
+  document.getElementById('btnLayer').addEventListener('click', () => {
+    if (satActive) { map.removeLayer(satLayer); map.addLayer(osmLayer); toast('Straatkaart'); }
+    else { map.removeLayer(osmLayer); map.addLayer(satLayer); toast('Satellietbeelden laden…'); }
+    satActive = !satActive;
+  });
+
+  /* ---------- Toast ---------- */
+  let toastTimer = null;
+  function toast(msg, ms) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), ms || 2400);
+  }
+
+  function appAlert(message) {
+    return new Promise((resolve) => {
+      document.getElementById('confirmModalMessage').textContent = message;
+      const overlay = document.getElementById('confirmModalOverlay');
+      const okBtn = document.getElementById('confirmModalOk');
+      const cancelBtn = document.getElementById('confirmModalCancel');
+      cancelBtn.style.display = 'none';
+      okBtn.textContent = 'OK';
+      okBtn.style.background = 'var(--forest-800)';
+      overlay.style.display = 'flex';
+      function cleanup() {
+        overlay.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.style.display = '';
+        okBtn.textContent = 'Bevestigen';
+        okBtn.style.background = 'var(--danger)';
+        resolve();
+      }
+      function onOk() { cleanup(); }
+      okBtn.addEventListener('click', onOk);
+    });
+  }
+
+  function appConfirm(message) {
+    return new Promise((resolve) => {
+      document.getElementById('confirmModalMessage').textContent = message;
+      const overlay = document.getElementById('confirmModalOverlay');
+      const okBtn = document.getElementById('confirmModalOk');
+      const cancelBtn = document.getElementById('confirmModalCancel');
+      overlay.style.display = 'flex';
+      function cleanup(result) {
+        overlay.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        overlay.removeEventListener('click', onOverlayClick);
+        resolve(result);
+      }
+      function onOk() { cleanup(true); }
+      function onCancel() { cleanup(false); }
+      function onOverlayClick(ev) { if (ev.target === overlay) cleanup(false); }
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      overlay.addEventListener('click', onOverlayClick);
+    });
+  }
+
+  /* ---------- Sheets ---------- */
+  const overlay = document.getElementById('overlay');
+  const sheetIds = {
+    menu:'sheetMenu', boundary:'sheetBoundary', wild:'sheetWildList', addwild:'sheetWild',
+    markers:'sheetMarkersList', addmarker:'sheetMarker', tracks:'sheetTracks',
+    weather:'sheetWeather', data:'sheetData', tableau:'sheetTableau', addtableau:'sheetTableauAdd', tableauspecies:'sheetTableauSpecies'
+  };
+  const sheetEls = {};
+  Object.keys(sheetIds).forEach(k => sheetEls[k] = document.getElementById(sheetIds[k]));
+
+  function openSheet(name) {
+    closeAllSheets();
+    sheetEls[name].classList.add('open');
+    overlay.classList.add('open');
+  }
+  function closeAllSheets() {
+    Object.values(sheetEls).forEach(s => s.classList.remove('open'));
+    overlay.classList.remove('open');
+  }
+  overlay.addEventListener('click', () => { closeAllSheets(); cancelDrawing(); });
+  document.getElementById('btnMenu').addEventListener('click', () => openSheet('menu'));
+  document.getElementById('btnQuickWild').addEventListener('click', openWildSheet);
+  document.getElementById('btnQuickMarker').addEventListener('click', openMarkerSheet);
+  document.querySelectorAll('.menu-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-open');
+      if (target === 'wild') { renderWildList(); openSheet('wild'); }
+      else if (target === 'markers') { renderMarkersList(); openSheet('markers'); }
+      else if (target === 'tracks') { renderTracksList(); openSheet('tracks'); }
+      else if (target === 'weather') { openSheet('weather'); loadWeatherPanel(); }
+      else if (target === 'boundary') { openSheet('boundary'); }
+      else if (target === 'tableau') { openSheet('tableau'); renderTableau(); }
+      else if (target === 'data') { openSheet('data'); }
+    });
+  });
+  document.querySelectorAll('[data-back]').forEach(btn => {
+    btn.addEventListener('click', () => openSheet('menu'));
+  });
+
+  /* ---------- Point in polygon (ray casting), supports multiple rings ---------- */
+  function pointInRing(lat, lng, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const yi = ring[i][0], xi = ring[i][1];
+      const yj = ring[j][0], xj = ring[j][1];
+      const intersect = ((yi > lat) !== (yj > lat)) &&
+        (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+  function isInsideBoundary(lat, lng) {
+    if (!boundaryLatLngs || boundaryLatLngs.length === 0) return null;
+    return boundaryLatLngs.some(ring => pointInRing(lat, lng, ring));
+  }
+
+  /* ---------- Boundary rendering / persistence ---------- */
+  function renderBoundary() {
+    if (boundaryLayer) { map.removeLayer(boundaryLayer); boundaryLayer = null; }
+    const g = getActiveGebied();
+    document.getElementById('gebiedNameDisplay').textContent = g ? (g.name + (g.locked ? ' 🔒' : '')) : 'Geen jachtgebied';
+    if (!boundaryLatLngs || boundaryLatLngs.length === 0) {
+      document.getElementById('zoneLabel').textContent = 'Geen grens ingesteld';
+      renderZonesList();
+      return;
+    }
+    const polygons = [];
+    boundaryLatLngs.forEach((ring, idx) => {
+      try {
+        const validRing = Array.isArray(ring) && ring.length >= 3 &&
+          ring.every(pt => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
+        if (!validRing) { console.warn('Ongeldige zone overgeslagen bij tekenen, index', idx, ring); return; }
+        polygons.push(L.polygon(ring, { color:'#e11d1d', weight:3, fillColor:'#e11d1d', fillOpacity:0.1 }));
+      } catch (e) { console.warn('Kon zone niet tekenen, index', idx, e); }
+    });
+    boundaryLayer = L.layerGroup(polygons).addTo(map);
+    document.getElementById('zoneLabel').textContent = boundaryLatLngs.length + ' zone(s)' +
+      (polygons.length < boundaryLatLngs.length ? ' (' + (boundaryLatLngs.length - polygons.length) + ' niet tekenbaar)' : '');
+    try {
+      const allPts = boundaryLatLngs.flat().filter(pt => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
+      if (allPts.length) map.fitBounds(L.latLngBounds(allPts), { padding:[30,30] });
+    } catch(e) {}
+    renderZonesList();
+  }
+  function getActiveGebied() { return jachtgebieden.find(g => g.id === activeGebiedId) || null; }
+  function isGebiedLocked() { const g = getActiveGebied(); return !!(g && g.locked); }
+  function blockedByLock() {
+    if (isGebiedLocked()) { toast('🔒 Dit jachtgebied is vergrendeld — ontgrendel eerst'); return true; }
+    return false;
+  }
+  function genGebiedId() { return 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7); }
+
+  async function saveGebieden() {
+    const g = getActiveGebied();
+    if (g) g.zones = boundaryLatLngs;
+    await idbPut('settings', { key: 'jachtgebieden', value: jachtgebieden });
+    await idbPut('settings', { key: 'activeGebiedId', value: activeGebiedId });
+  }
+  async function saveBoundary() { await saveGebieden(); }
+
+  function renderGebiedSelect() {
+    document.getElementById('gebiedNameEditArea').style.display = 'none';
+    const sel = document.getElementById('gebiedSelect');
+    sel.innerHTML = jachtgebieden.map(g => '<option value="' + g.id + '"' + (g.id === activeGebiedId ? ' selected' : '') + '>' +
+      escapeHtml(g.name) + (g.locked ? ' 🔒' : '') + '</option>').join('');
+    const lockBtn = document.getElementById('btnToggleLock');
+    const locked = isGebiedLocked();
+    lockBtn.textContent = locked ? '🔓 Ontgrendelen' : '🔒 Vergrendelen';
+    document.getElementById('gebiedLockHint').style.display = locked ? '' : 'none';
+    ['btnToggleOfficial','btnImportOfficial','btnStartDraw','btnImportBoundary','btnUndoZone','btnClearBoundary'].forEach(id => {
+      const el = document.getElementById(id);
+      if (id === 'btnToggleOfficial') return; // viewing Geopunt is always allowed
+      el.style.opacity = locked ? '0.5' : '1';
+    });
+    renderGebiedQuickSwitch();
+  }
+  function renderGebiedQuickSwitch() {
+    const list = document.getElementById('gebiedQuickList');
+    if (!list) return;
+    list.innerHTML = jachtgebieden.map(g =>
+      '<div class="gebied-quick-item' + (g.id === activeGebiedId ? ' active' : '') + '" data-id="' + g.id + '">' +
+        '<span>' + escapeHtml(g.name) + '</span><span>' + (g.locked ? '🔒' : '') + '</span>' +
+      '</div>'
+    ).join('');
+    list.querySelectorAll('.gebied-quick-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const id = item.getAttribute('data-id');
+        if (id !== activeGebiedId) {
+          activeGebiedId = id;
+          boundaryLatLngs = getActiveGebied().zones;
+          await saveGebieden();
+          renderGebiedSelect();
+          renderBoundary();
+          toast('Gewisseld naar "' + getActiveGebied().name + '"');
+        }
+        document.getElementById('gebiedQuickSwitch').style.display = 'none';
+      });
+    });
+  }
+  document.getElementById('gebiedNameDisplay').addEventListener('click', () => {
+    const panel = document.getElementById('gebiedQuickSwitch');
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+  });
+  document.getElementById('btnQuickManageGebieden').addEventListener('click', () => {
+    document.getElementById('gebiedQuickSwitch').style.display = 'none';
+    openSheet('boundary');
+  });
+  document.addEventListener('click', (ev) => {
+    const panel = document.getElementById('gebiedQuickSwitch');
+    if (panel.style.display === 'none') return;
+    if (!panel.contains(ev.target) && ev.target.id !== 'gebiedNameDisplay') panel.style.display = 'none';
+  });
+  document.getElementById('gebiedSelect').addEventListener('change', async (e) => {
+    activeGebiedId = e.target.value;
+    boundaryLatLngs = getActiveGebied().zones;
+    await saveGebieden();
+    renderGebiedSelect();
+    renderBoundary();
+  });
+  let gebiedNameEditMode = null; // 'new' | 'rename'
+  function openGebiedNameEdit(mode, prefill) {
+    gebiedNameEditMode = mode;
+    document.getElementById('gebiedNameInput').value = prefill || '';
+    document.getElementById('gebiedNameEditArea').style.display = '';
+    document.getElementById('gebiedNameInput').focus();
+  }
+  document.getElementById('btnNewGebied').addEventListener('click', () => {
+    openGebiedNameEdit('new', 'Jachtgebied ' + (jachtgebieden.length + 1));
+  });
+  document.getElementById('btnRenameGebied').addEventListener('click', () => {
+    const g = getActiveGebied();
+    if (!g) return;
+    openGebiedNameEdit('rename', g.name);
+  });
+  document.getElementById('btnCancelGebiedName').addEventListener('click', () => {
+    document.getElementById('gebiedNameEditArea').style.display = 'none';
+  });
+  document.getElementById('btnConfirmGebiedName').addEventListener('click', async () => {
+    const name = document.getElementById('gebiedNameInput').value.trim();
+    if (!name) { toast('Vul een naam in'); return; }
+    if (gebiedNameEditMode === 'new') {
+      const g = { id: genGebiedId(), name, zones: null, locked: false };
+      jachtgebieden.push(g);
+      activeGebiedId = g.id;
+      boundaryLatLngs = null;
+      await saveGebieden();
+      renderGebiedSelect();
+      renderBoundary();
+      toast('Jachtgebied "' + g.name + '" aangemaakt');
+    } else if (gebiedNameEditMode === 'rename') {
+      const g = getActiveGebied();
+      if (g) {
+        g.name = name;
+        await saveGebieden();
+        renderGebiedSelect();
+        renderBoundary();
+        toast('Naam gewijzigd naar "' + g.name + '"');
+      }
+    }
+    document.getElementById('gebiedNameEditArea').style.display = 'none';
+  });
+  document.getElementById('btnToggleLock').addEventListener('click', async () => {
+    const g = getActiveGebied();
+    if (!g) return;
+    g.locked = !g.locked;
+    await saveGebieden();
+    renderGebiedSelect();
+    toast(g.locked ? '🔒 Jachtgebied vergrendeld' : '🔓 Jachtgebied ontgrendeld');
+  });
+
+  async function loadBoundary() {
+    const rec = await idbGet('settings', 'jachtgebieden');
+    if (rec && rec.value && rec.value.length) {
+      jachtgebieden = rec.value;
+    } else {
+      // Migrate legacy single-boundary data if present, else start fresh
+      const legacy = await idbGet('settings', 'boundary');
+      jachtgebieden = [{ id: genGebiedId(), name: 'Jachtgebied 1', zones: (legacy && legacy.value) || null, locked: false }];
+    }
+    const activeRec = await idbGet('settings', 'activeGebiedId');
+    activeGebiedId = (activeRec && activeRec.value && jachtgebieden.some(g => g.id === activeRec.value)) ? activeRec.value : jachtgebieden[0].id;
+    boundaryLatLngs = getActiveGebied().zones;
+    await saveGebieden();
+    renderGebiedSelect();
+    renderBoundary();
+  }
+
+  /* ---------- Manual drawing ---------- */
+  const drawBanner = document.getElementById('drawBanner');
+  let drawHistory = [];
+  let editingZoneIndex = null;
+  function pushDrawHistory() { drawHistory.push(drawPoints.map(p => [p[0], p[1]])); }
+  function undoDraw() {
+    if (drawHistory.length === 0) { toast('Niets meer om ongedaan te maken'); return; }
+    drawPoints = drawHistory.pop();
+    redrawDraft();
+  }
+  function startDrawing() {
+    if (blockedByLock()) return;
+    closeAllSheets();
+    editingZoneIndex = null;
+    drawingActive = true;
+    drawPoints = [];
+    drawHistory = [];
+    draftLine = null;
+    if (drawLayer) map.removeLayer(drawLayer);
+    drawLayer = L.layerGroup().addTo(map);
+    drawBanner.classList.add('show');
+    document.getElementById('drawBannerTxt').textContent = 'Tik om punten te plaatsen — versleep ze nadien om bij te stellen';
+    map.on('click', onDrawClick);
+  }
+  function editZone(idx) {
+    if (blockedByLock()) return;
+    closeAllSheets();
+    editingZoneIndex = idx;
+    drawingActive = true;
+    drawPoints = boundaryLatLngs[idx].map(p => [p[0], p[1]]);
+    drawHistory = [];
+    draftLine = null;
+    if (drawLayer) map.removeLayer(drawLayer);
+    drawLayer = L.layerGroup().addTo(map);
+    drawBanner.classList.add('show');
+    document.getElementById('drawBannerTxt').textContent = 'Versleep punten of tik tussenpuntjes om deze zone aan te passen';
+    map.on('click', onDrawClick);
+    redrawDraft();
+    const allPts = drawPoints;
+    try { map.fitBounds(L.latLngBounds(allPts), { padding:[40,40] }); } catch(e) {}
+  }
+  function onDrawClick(e) {
+    pushDrawHistory();
+    drawPoints.push([e.latlng.lat, e.latlng.lng]);
+    redrawDraft();
+  }
+  function redrawDraft() {
+    drawLayer.clearLayers();
+    const dragIcon = L.divIcon({
+      html: '<div style="width:16px;height:16px;border-radius:50%;background:#d94f04;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);"></div>',
+      className:'', iconSize:[16,16], iconAnchor:[8,8]
+    });
+    const midIcon = L.divIcon({
+      html: '<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #d94f04;opacity:.85;"></div>',
+      className:'', iconSize:[12,12], iconAnchor:[6,6]
+    });
+    drawPoints.forEach((p, idx) => {
+      const marker = L.marker(p, { icon: dragIcon, draggable: true }).addTo(drawLayer);
+      marker.on('dragstart', pushDrawHistory);
+      marker.on('drag', (ev) => {
+        drawPoints[idx] = [ev.target.getLatLng().lat, ev.target.getLatLng().lng];
+        redrawDraftLine();
+      });
+      marker.on('dragend', redrawDraft);
+    });
+    const n = drawPoints.length;
+    const edges = [];
+    for (let i = 0; i < n - 1; i++) edges.push([i, i + 1]);
+    if (n >= 3) edges.push([n - 1, 0]);
+    edges.forEach(([i, j]) => {
+      const midLat = (drawPoints[i][0] + drawPoints[j][0]) / 2;
+      const midLng = (drawPoints[i][1] + drawPoints[j][1]) / 2;
+      const insertIdx = i + 1;
+      const midMarker = L.marker([midLat, midLng], { icon: midIcon }).addTo(drawLayer);
+      midMarker.on('click', (ev) => {
+        L.DomEvent.stop(ev);
+        pushDrawHistory();
+        drawPoints.splice(insertIdx, 0, [midLat, midLng]);
+        redrawDraft();
+      });
+    });
+    redrawDraftLine();
+  }
+  function redrawDraftLine() {
+    if (draftLine) drawLayer.removeLayer(draftLine);
+    if (drawPoints.length > 1) {
+      draftLine = L.polyline(drawPoints.concat(drawPoints.length > 2 ? [drawPoints[0]] : []), { color:'#d94f04', weight:3, dashArray:'6,6' }).addTo(drawLayer);
+    }
+  }
+  document.getElementById('drawUndo').addEventListener('click', undoDraw);
+  document.getElementById('drawCancel').addEventListener('click', cancelDrawing);
+  document.getElementById('drawFinish').addEventListener('click', async () => {
+    if (drawPoints.length < 3) { toast('Minimum 3 punten nodig'); return; }
+    if (editingZoneIndex !== null) {
+      boundaryLatLngs[editingZoneIndex] = drawPoints.slice();
+      toast('Zone bijgewerkt');
+    } else {
+      boundaryLatLngs = (boundaryLatLngs || []).concat([drawPoints.slice()]);
+      toast('Zone toegevoegd — jachtgebied bestaat nu uit ' + boundaryLatLngs.length + ' zone(s)');
+    }
+    editingZoneIndex = null;
+    await saveBoundary();
+    renderBoundary();
+    renderZonesList();
+    stopDrawingUi();
+  });
+  function cancelDrawing() { editingZoneIndex = null; stopDrawingUi(); }
+  function stopDrawingUi() {
+    drawingActive = false;
+    drawBanner.classList.remove('show');
+    map.off('click', onDrawClick);
+    if (drawLayer) { map.removeLayer(drawLayer); drawLayer = null; }
+    drawPoints = [];
+  }
+
+  /* ---------- KML / GeoJSON import ---------- */
+  function parseKML(text) {
+    const xml = new DOMParser().parseFromString(text, 'text/xml');
+    const coordNodes = xml.getElementsByTagName('coordinates');
+    const rings = [];
+    for (const node of coordNodes) {
+      const raw = node.textContent.trim();
+      if (!raw) continue;
+      const pts = raw.split(/\s+/).map(pair => {
+        const parts = pair.split(',');
+        const lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+        return [lat, lng];
+      }).filter(p => !isNaN(p[0]) && !isNaN(p[1]));
+      if (pts.length >= 3) rings.push(pts);
+    }
+    return rings;
+  }
+  function findKMLNetworkLinkHref(text) {
+    const xml = new DOMParser().parseFromString(text, 'text/xml');
+    const linkNodes = xml.getElementsByTagName('Link');
+    for (const node of linkNodes) {
+      const href = node.getElementsByTagName('href')[0];
+      if (href && href.textContent.trim()) return href.textContent.trim();
+    }
+    return null;
+  }
+  function parseGeoJSON(obj) {
+    const rings = [];
+    function fromPolygonCoords(coords) {
+      if (!Array.isArray(coords) || coords.length === 0) return;
+      const outer = coords[0]; // ignore holes (interior rings) — outer boundary only
+      if (!Array.isArray(outer)) return;
+      const pts = outer.map(c => [c[1], c[0]]).filter(pt => Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
+      if (pts.length >= 3) rings.push(pts);
+    }
+    function handleGeometry(geom) {
+      if (!geom) return;
+      if (geom.type === 'Polygon') fromPolygonCoords(geom.coordinates);
+      else if (geom.type === 'MultiPolygon') geom.coordinates.forEach(fromPolygonCoords);
+    }
+    if (obj.type === 'FeatureCollection') obj.features.forEach(f => handleGeometry(f.geometry));
+    else if (obj.type === 'Feature') handleGeometry(obj.geometry);
+    else handleGeometry(obj);
+    return rings;
+  }
+
+  document.getElementById('btnImportBoundary').addEventListener('click', () => document.getElementById('fileImportBoundary').click());
+  document.getElementById('fileImportBoundary').addEventListener('change', async (e) => {
+    if (blockedByLock()) { e.target.value = ''; return; }
+    const file = e.target.files[0];
+    if (!file) return;
+    let rings = [];
+    try {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.kmz')) {
+        const zip = await JSZip.loadAsync(file);
+        const kmlEntry = Object.values(zip.files).find(f => f.name.toLowerCase().endsWith('.kml'));
+        if (!kmlEntry) throw new Error('Geen KML-bestand gevonden in dit KMZ-archief');
+        const kmlText = await kmlEntry.async('text');
+        rings = parseKML(kmlText);
+        if (rings.length === 0) {
+          const href = findKMLNetworkLinkHref(kmlText);
+          if (href) {
+            toast('Dit bestand verwijst naar live Google-data — ophalen…');
+            try {
+              const resp = await fetch(href);
+              if (!resp.ok) throw new Error('niet bereikbaar');
+              rings = parseKML(await resp.text());
+            } catch (linkErr) {
+              window.open(href, '_blank');
+              await appAlert('Kon de live kaartdata niet automatisch ophalen (browserbeveiliging).\n\nEr opende een nieuw tabblad met de echte tekening. Sla die pagina op als .kml bestand (Ctrl+S) en importeer dat bestand hier opnieuw.\n\nTip: exporteer voortaan in Google My Maps rechtstreeks de specifieke LAAG (klik ⋮ naast de laagnaam zelf, niet naast de titel van de hele kaart) — dat geeft meteen de echte tekening in plaats van een verwijzing.');
+              e.target.value = '';
+              return;
+            }
+          }
+        }
+      } else if (lowerName.endsWith('.kml')) {
+        const kmlText = await file.text();
+        rings = parseKML(kmlText);
+        if (rings.length === 0) {
+          const href = findKMLNetworkLinkHref(kmlText);
+          if (href) {
+            toast('Dit bestand verwijst naar live Google-data — ophalen…');
+            try {
+              const resp = await fetch(href);
+              if (!resp.ok) throw new Error('niet bereikbaar');
+              rings = parseKML(await resp.text());
+            } catch (linkErr) {
+              window.open(href, '_blank');
+              await appAlert('Kon de live kaartdata niet automatisch ophalen (browserbeveiliging).\n\nEr opende een nieuw tabblad met de echte tekening. Sla die pagina op als .kml bestand (Ctrl+S) en importeer dat bestand hier opnieuw.\n\nTip: exporteer voortaan in Google My Maps rechtstreeks de specifieke LAAG (klik ⋮ naast de laagnaam zelf, niet naast de titel van de hele kaart) — dat geeft meteen de echte tekening in plaats van een verwijzing.');
+              e.target.value = '';
+              return;
+            }
+          }
+        }
+      } else {
+        rings = parseGeoJSON(JSON.parse(await file.text()));
+      }
+    } catch (err) { toast('Kon bestand niet lezen: ' + err.message); return; }
+    if (rings.length === 0) { toast('Geen (multi)polygoon gevonden in bestand'); return; }
+    boundaryLatLngs = (boundaryLatLngs || []).concat(rings);
+    await saveBoundary();
+    renderBoundary();
+    closeAllSheets();
+    toast(rings.length + ' zone(s) toegevoegd — jachtgebied bestaat nu uit ' + boundaryLatLngs.length + ' zone(s)');
+    e.target.value = '';
+  });
+  document.getElementById('btnClearBoundary').addEventListener('click', async () => {
+    if (blockedByLock()) return;
+    if (!(await appConfirm('Dit verwijdert je VOLLEDIGE jachtgebied (alle zones), niet enkel de laatste. Doorgaan?'))) return;
+    boundaryLatLngs = null;
+    await saveBoundary();
+    renderBoundary();
+    closeAllSheets();
+    toast('Grens verwijderd');
+  });
+  document.getElementById('btnStartDraw').addEventListener('click', startDrawing);
+
+  /* ---------- Locatie zoeken (OpenStreetMap Nominatim, gratis) ---------- */
+  document.getElementById('btnLocationSearch').addEventListener('click', () => {
+    const area = document.getElementById('locationSearchArea');
+    area.style.display = area.style.display === 'none' ? '' : 'none';
+    if (area.style.display !== 'none') document.getElementById('locationSearchInput').focus();
+  });
+  async function doLocationSearch() {
+    const q = document.getElementById('locationSearchInput').value.trim();
+    if (!q) return;
+    const resultsEl = document.getElementById('locationSearchResults');
+    resultsEl.innerHTML = '<div class="hint">Zoeken…</div>';
+    try {
+      const resp = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(q));
+      if (!resp.ok) throw new Error('Zoekdienst niet bereikbaar');
+      const results = await resp.json();
+      if (results.length === 0) { resultsEl.innerHTML = '<div class="hint">Niets gevonden voor "' + escapeHtml(q) + '"</div>'; return; }
+      resultsEl.innerHTML = '';
+      results.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'search-result';
+        div.textContent = r.display_name;
+        div.addEventListener('click', () => {
+          map.setView([parseFloat(r.lat), parseFloat(r.lon)], 14);
+          document.getElementById('locationSearchArea').style.display = 'none';
+          closeAllSheets();
+          toast('Kaart verplaatst naar ' + r.display_name.split(',')[0]);
+        });
+        resultsEl.appendChild(div);
+      });
+    } catch (err) {
+      resultsEl.innerHTML = '<div class="hint">Kon niet zoeken: ' + err.message + '</div>';
+    }
+  }
+  document.getElementById('btnDoLocationSearch').addEventListener('click', doLocationSearch);
+  document.getElementById('locationSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLocationSearch(); });
+
+  /* ---------- Kaart overleggen om na te tekenen ---------- */
+  let overlayImageLayer = null, overlayOutlineRect = null, overlayNwMarker = null, overlaySeMarker = null;
+  document.getElementById('btnOverlayMap').addEventListener('click', () => {
+    if (blockedByLock()) return;
+    document.getElementById('fileOverlayImage').click();
+  });
+  document.getElementById('fileOverlayImage').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => toast('⚠️ Kon het bestand niet lezen');
+    reader.onload = () => {
+      const url = reader.result; // data: URL — self-contained, no blob lifecycle issues
+      closeAllSheets();
+      const b = map.getBounds();
+      const bounds = b.pad ? b.pad(-0.15) : b; // start slightly smaller than the visible view
+      if (overlayImageLayer) map.removeLayer(overlayImageLayer);
+      if (overlayOutlineRect) map.removeLayer(overlayOutlineRect);
+      overlayImageLayer = L.imageOverlay(url, bounds, { opacity: 0.7 }).addTo(map);
+      overlayImageLayer.on('error', () => toast('⚠️ Kon de afbeelding niet laden — probeer een JPG of PNG'));
+      overlayImageLayer.on('load', () => toast('Foto geladen — versleep de hoekpunten'));
+      overlayOutlineRect = L.rectangle(bounds, { color:'#d94f04', weight:2, dashArray:'6,6', fill:false }).addTo(map);
+      addOverlayCornerHandles(bounds);
+      document.getElementById('overlayOpacity').value = 70;
+      document.getElementById('overlayControls').style.display = '';
+      toast('Versleep de hoekpunten om je foto uit te lijnen');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+  function addOverlayCornerHandles(bounds) {
+    removeOverlayCornerHandles();
+    const handleIcon = L.divIcon({
+      html: '<div style="width:20px;height:20px;border-radius:50%;background:#d94f04;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);"></div>',
+      className:'', iconSize:[20,20], iconAnchor:[10,10]
+    });
+    overlayNwMarker = L.marker(bounds.getNorthWest(), { icon: handleIcon, draggable: true }).addTo(map);
+    overlaySeMarker = L.marker(bounds.getSouthEast(), { icon: handleIcon, draggable: true }).addTo(map);
+    function updateOverlayBounds() {
+      const newBounds = L.latLngBounds(overlayNwMarker.getLatLng(), overlaySeMarker.getLatLng());
+      overlayImageLayer.setBounds(newBounds);
+      if (overlayOutlineRect) overlayOutlineRect.setBounds(newBounds);
+    }
+    overlayNwMarker.on('drag', updateOverlayBounds);
+    overlaySeMarker.on('drag', updateOverlayBounds);
+  }
+  function removeOverlayCornerHandles() {
+    if (overlayNwMarker) { map.removeLayer(overlayNwMarker); overlayNwMarker = null; }
+    if (overlaySeMarker) { map.removeLayer(overlaySeMarker); overlaySeMarker = null; }
+  }
+  document.getElementById('overlayOpacity').addEventListener('input', (e) => {
+    if (overlayImageLayer) overlayImageLayer.setOpacity(e.target.value / 100);
+  });
+  document.getElementById('btnRemoveOverlay').addEventListener('click', () => {
+    if (overlayImageLayer) { map.removeLayer(overlayImageLayer); overlayImageLayer = null; }
+    if (overlayOutlineRect) { map.removeLayer(overlayOutlineRect); overlayOutlineRect = null; }
+    removeOverlayCornerHandles();
+    document.getElementById('overlayControls').style.display = 'none';
+    toast('Overlay verwijderd');
+  });
+  document.getElementById('btnDoneOverlay').addEventListener('click', () => {
+    removeOverlayCornerHandles();
+    document.getElementById('overlayControls').style.display = 'none';
+    startDrawing();
+    toast('Teken nu de omtrek na — de foto blijft zichtbaar als hulplijn');
+  });
+  function renderZonesList() {
+    const el = document.getElementById('zonesListEl');
+    if (!el) return;
+    if (!boundaryLatLngs || boundaryLatLngs.length === 0) { el.innerHTML = ''; return; }
+    const locked = isGebiedLocked();
+    el.innerHTML = '<div class="hint" style="margin-bottom:8px;">Zones in dit jachtgebied:</div>' +
+      boundaryLatLngs.map((ring, idx) =>
+        '<div class="list-card" style="margin-bottom:6px;">' +
+          '<div class="thumb">📐</div>' +
+          '<div class="info"><div class="title">Zone ' + (idx + 1) + '</div><div class="meta">' + ring.length + ' punten</div></div>' +
+          '<div class="list-actions">' +
+            '<button data-act="edit" data-idx="' + idx + '" title="Bewerk"' + (locked ? ' disabled style="opacity:.4;"' : '') + '>✏️</button>' +
+          '</div>' +
+        '</div>'
+      ).join('');
+    el.querySelectorAll('[data-act=edit]').forEach(btn => {
+      btn.addEventListener('click', () => editZone(parseInt(btn.getAttribute('data-idx'), 10)));
+    });
+  }
+  document.getElementById('btnUndoZone').addEventListener('click', async () => {
+    if (blockedByLock()) return;
+    if (!boundaryLatLngs || boundaryLatLngs.length === 0) { toast('Geen zones om te verwijderen'); return; }
+    boundaryLatLngs.pop();
+    if (boundaryLatLngs.length === 0) boundaryLatLngs = null;
+    await saveBoundary();
+    renderBoundary();
+    closeAllSheets();
+    toast('Laatste zone verwijderd');
+  });
+
+  document.getElementById('btnExportKML').addEventListener('click', () => {
+    if (!boundaryLatLngs || boundaryLatLngs.length === 0) { toast('Geen grens om te exporteren'); return; }
+    const g = getActiveGebied();
+    const gebiedName = g ? g.name : 'Jachtgebied';
+    const placemarks = boundaryLatLngs.map((ring, i) => {
+      const closed = ring.concat([ring[0]]); // KML requires the ring to close
+      const coordsStr = closed.map(pt => pt[1] + ',' + pt[0] + ',0').join(' ');
+      return '  <Placemark>\n    <name>' + escapeHtml(gebiedName) + ' - zone ' + (i + 1) + '</name>\n' +
+        '    <Polygon><outerBoundaryIs><LinearRing><coordinates>' + coordsStr + '</coordinates></LinearRing></outerBoundaryIs></Polygon>\n' +
+        '  </Placemark>';
+    }).join('\n');
+    const kml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>\n' +
+      '  <name>' + escapeHtml(gebiedName) + '</name>\n' + placemarks + '\n' +
+      '</Document></kml>';
+    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = gebiedName.replace(/[^a-z0-9]/gi, '_') + '.kml';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('KML gedownload — bruikbaar in Google My Maps, Google Earth, QGIS, ...');
+  });
+
+  /* ---------- Officiële jachtterreinen (Digitaal Vlaanderen, WMS/WFS) ---------- */
+  document.getElementById('btnToggleOfficial').addEventListener('click', () => {
+    closeAllSheets();
+    const c = map.getCenter();
+    window.open('https://www.geopunt.be/kaart?app=Geopunt-kaart_app&basemap=grb&kaart=Jachtterreinen&maximize=1', '_blank');
+    toast('Geopunt geopend in nieuw tabblad — zoek je gemeente/adres daar op');
+  });
+
+  document.getElementById('btnImportOfficial').addEventListener('click', () => {
+    if (blockedByLock()) return;
+    closeAllSheets();
+    toast('Tik op een punt binnen jouw jachtterrein');
+    map.once('click', onImportOfficialClick);
+  });
+
+  async function onImportOfficialClick(e) {
+    const lat = e.latlng.lat, lng = e.latlng.lng;
+    const d = 0.008; // ~800m bbox around the tapped point, forgiving for imprecise taps
+    const bbox = (lng-d) + ',' + (lat-d) + ',' + (lng+d) + ',' + (lat+d) + ',EPSG:4326';
+    const url = 'https://geo.api.vlaanderen.be/Jacht/wfs?service=WFS&version=2.0.0&request=GetFeature' +
+      '&typeNames=Jacht:Jachtterr&outputFormat=application/json&srsName=EPSG:4326&bbox=' + encodeURIComponent(bbox);
+    toast('Officieel jachtterrein opzoeken…');
+    let data;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Dienst niet bereikbaar');
+      data = await resp.json();
+    } catch (err) {
+      window.open(url, '_blank');
+      await appAlert('Automatisch ophalen lukt niet vanuit de app (browserbeveiliging).\n\nEr opende net een nieuw tabblad met de ruwe data. Sla die pagina op als bestand (Ctrl+S / Cmd+S, kies "jachtterrein.geojson"), en importeer dat bestand hier via "📂 Importeer KML / GeoJSON".');
+      return;
+    }
+    try {
+      if (!data.features || data.features.length === 0) { toast('Geen jachtterrein gevonden hier — zet eerst de officiële laag aan om te zien waar de zones liggen'); return; }
+      let matchRings = null;
+      for (const feature of data.features) {
+        const rings = parseGeoJSON({ type:'Feature', geometry: feature.geometry });
+        if (rings.some(ring => pointInRing(lat, lng, ring))) { matchRings = rings; break; }
+      }
+      if (!matchRings) { toast('Geen jachtterrein gevonden exact op dat punt — probeer opnieuw te tikken'); return; }
+      const alreadyHave = boundaryLatLngs && boundaryLatLngs.some(existingRing =>
+        existingRing.length === matchRings[0].length &&
+        existingRing.every((pt, i) => Math.abs(pt[0]-matchRings[0][i][0]) < 1e-9 && Math.abs(pt[1]-matchRings[0][i][1]) < 1e-9)
+      );
+      if (alreadyHave) { toast('Deze zone zit al in je jachtgebied'); return; }
+      const zoneCountBefore = boundaryLatLngs ? boundaryLatLngs.length : 0;
+      if (!(await appConfirm('Deze zone toevoegen aan jouw jachtgebied? (je hebt er nu ' + zoneCountBefore + ')'))) return;
+      boundaryLatLngs = (boundaryLatLngs || []).concat(matchRings);
+      await saveBoundary();
+      renderBoundary();
+      toast('Zone toegevoegd — jachtgebied bestaat nu uit ' + boundaryLatLngs.length + ' zone(s)');
+    } catch (err) {
+      toast('Kon jachtterrein niet verwerken: ' + err.message);
+    }
+  }
+
+  /* ---------- Geolocation ---------- */
+  function getPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) { reject(new Error('Geolocatie niet ondersteund')); return; }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+        err => reject(err),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+      );
+    });
+  }
+  function haversine(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  document.getElementById('btnLocate').addEventListener('click', async () => {
+    try {
+      const pos = await getPosition();
+      if (userMarker) map.removeLayer(userMarker);
+      userMarker = L.circleMarker([pos.lat, pos.lng], { radius:8, color:'#1e6fd9', fillColor:'#1e6fd9', fillOpacity:.9, weight:2 }).addTo(map);
+      map.setView([pos.lat, pos.lng], 16);
+    } catch (e) { toast('Kon locatie niet bepalen'); }
+  });
+
+  /* ---------- Windrichting ---------- */
+  function compassLabel(deg) {
+    const dirs = ['N','NO','O','ZO','Z','ZW','W','NW'];
+    return dirs[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+  }
+  let windOn = false;
+  let windRefreshInterval = null;
+  let lastWindData = null; // {speed, dir, lat, lng, at}
+  let windGridMarkers = [];
+  let lastWindDir = null;
+
+  function buildGridArrowIcon(towardsDeg) {
+    return L.divIcon({
+      html: '<div style="transform:rotate(' + towardsDeg + 'deg); font-size:20px; line-height:1; color:#22d3ee; text-shadow:0 0 3px #000, 0 0 4px #000;">↑</div>',
+      className: '', iconSize: [24, 24], iconAnchor: [12, 12]
+    });
+  }
+  function clearWindGrid() {
+    windGridMarkers.forEach(m => map.removeLayer(m));
+    windGridMarkers = [];
+  }
+  function renderWindGrid(fromDeg) {
+    clearWindGrid();
+    const towardsDeg = (fromDeg + 180) % 360;
+    const b = map.getBounds();
+    const rows = 7, cols = 7;
+    const latStep = (b.getNorth() - b.getSouth()) / (rows + 1);
+    const lngStep = (b.getEast() - b.getWest()) / (cols + 1);
+    const icon = buildGridArrowIcon(towardsDeg);
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        const lat = b.getSouth() + r * latStep;
+        const lng = b.getWest() + c * lngStep;
+        const m = L.marker([lat, lng], { icon, interactive: false, zIndexOffset: 400 }).addTo(map);
+        windGridMarkers.push(m);
+      }
+    }
+  }
+  function onMapMoveForWind() {
+    if (windOn && lastWindDir !== null) renderWindGrid(lastWindDir);
+  }
+  map.on('moveend', onMapMoveForWind);
+
+  async function fetchAndShowWind() {
+    // Reuse a very recent weather fetch (within 2 min) instead of firing a fresh request
+    if (lastWindData && (Date.now() - lastWindData.at) < 2 * 60 * 1000) {
+      showWindData(lastWindData.dir, lastWindData.speed, lastWindData.lat, lastWindData.lng);
+      return;
+    }
+    let lat, lng;
+    try { const pos = await getPosition(); lat = pos.lat; lng = pos.lng; }
+    catch (e) { const c = map.getCenter(); lat = c.lat; lng = c.lng; }
+    try {
+      const data = await fetchOpenMeteoCurrent(lat, lng);
+      const cur = data.current;
+      lastWindData = { speed: cur.wind_speed_10m, dir: cur.wind_direction_10m, lat, lng, at: Date.now() };
+      showWindData(cur.wind_direction_10m, cur.wind_speed_10m, lat, lng);
+    } catch (e) {
+      document.getElementById('windSpeedText').textContent = '–';
+      document.getElementById('windDirText').textContent = 'Fout: ' + (e && e.message ? e.message : String(e));
+      console.error('Wind fetch error:', e);
+    }
+  }
+  function showWindData(fromDeg, speed, lat, lng) {
+    const towardsDeg = (fromDeg + 180) % 360;
+    document.getElementById('windArrow').style.transform = 'rotate(' + towardsDeg + 'deg)';
+    document.getElementById('windSpeedText').textContent = Math.round(speed) + ' km/u';
+    document.getElementById('windDirText').textContent = 'Uit ' + compassLabel(fromDeg) + ' · pijl = waarheen';
+    lastWindDir = fromDeg;
+    if (windOn) renderWindGrid(fromDeg);
+  }
+  document.getElementById('btnWind').addEventListener('click', async () => {
+    windOn = !windOn;
+    const card = document.getElementById('windCard');
+    if (windOn) {
+      card.classList.add('show');
+      await fetchAndShowWind();
+      windRefreshInterval = setInterval(fetchAndShowWind, 5 * 60 * 1000);
+    } else {
+      card.classList.remove('show');
+      clearWindGrid();
+      clearInterval(windRefreshInterval);
+    }
+  });
+
+  /* ---------- GPS track recording ---------- */
+  let tracking = false, trackWatchId = null, trackPoints = [], trackStartTime = null, trackLiveLayer = null, trackTimerInterval = null, trackDistance = 0;
+
+  function fmtDuration(ms) {
+    const totalSec = Math.floor(ms/1000);
+    const h = Math.floor(totalSec/3600), m = Math.floor((totalSec%3600)/60), s = totalSec%60;
+    if (h > 0) return h + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+  function updateTrackBadge() {
+    const km = (trackDistance/1000).toFixed(1).replace('.', ',');
+    document.getElementById('trackBadgeTxt').textContent = fmtDuration(Date.now()-trackStartTime) + ' · ' + km + ' km';
+  }
+  function startTracking() {
+    if (!navigator.geolocation) { toast('Geolocatie niet ondersteund'); return; }
+    tracking = true; trackPoints = []; trackDistance = 0; trackStartTime = Date.now();
+    document.getElementById('btnRecord').classList.add('recording');
+    document.getElementById('btnRecord').textContent = '⏹';
+    document.getElementById('trackBadge').classList.add('show');
+    if (trackLiveLayer) map.removeLayer(trackLiveLayer);
+    trackLiveLayer = L.polyline([], { color:'#1e6fd9', weight:4, opacity:.9 }).addTo(map);
+    updateTrackBadge();
+    trackTimerInterval = setInterval(updateTrackBadge, 1000);
+    trackWatchId = navigator.geolocation.watchPosition(pos => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      if (trackPoints.length > 0) {
+        const last = trackPoints[trackPoints.length-1];
+        trackDistance += haversine(last[0], last[1], lat, lng);
+      }
+      trackPoints.push([lat, lng, Date.now()]);
+      trackLiveLayer.setLatLngs(trackPoints.map(p => [p[0], p[1]]));
+      updateTrackBadge();
+    }, err => { toast('GPS-signaal verloren'); }, { enableHighAccuracy:true, maximumAge:2000, timeout:20000 });
+    toast('Spoor gestart');
+  }
+  async function stopTracking() {
+    tracking = false;
+    if (trackWatchId !== null) navigator.geolocation.clearWatch(trackWatchId);
+    clearInterval(trackTimerInterval);
+    document.getElementById('btnRecord').classList.remove('recording');
+    document.getElementById('btnRecord').textContent = '⏺';
+    document.getElementById('trackBadge').classList.remove('show');
+    if (trackLiveLayer) { map.removeLayer(trackLiveLayer); trackLiveLayer = null; }
+    if (trackPoints.length >= 2) {
+      const track = { points: trackPoints, startTime: trackStartTime, endTime: Date.now(), distance: trackDistance };
+      const id = await idbAdd('tracks', track);
+      track.id = id;
+      tracks.push(track);
+      toast('Spoor bewaard: ' + (trackDistance/1000).toFixed(1).replace('.', ',') + ' km');
+    } else {
+      toast('Spoor te kort, niet bewaard');
+    }
+  }
+  document.getElementById('btnRecord').addEventListener('click', () => { tracking ? stopTracking() : startTracking(); });
+  document.getElementById('btnStopTrack').addEventListener('click', stopTracking);
+
+  function fmtDateShort(ts) {
+    const d = new Date(ts);
+    return d.toLocaleDateString('nl-BE', { day:'2-digit', month:'2-digit', year:'numeric' }) + ' · ' +
+           d.toLocaleTimeString('nl-BE', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  async function loadTracks() { tracks = await idbGetAll('tracks'); }
+  function renderTracksList() {
+    const el = document.getElementById('tracksListEl');
+    document.getElementById('tracksSubtitle').textContent = tracks.length + ' spoor/sporen bewaard';
+    if (tracks.length === 0) {
+      el.innerHTML = '<div class="empty-state"><div class="emoji">🥾</div>Nog geen sporen bewaard.</div>';
+      return;
+    }
+    const sorted = tracks.slice().sort((a,b) => b.startTime - a.startTime);
+    el.innerHTML = '';
+    sorted.forEach(tr => {
+      const card = document.createElement('div');
+      card.className = 'list-card';
+      card.innerHTML =
+        '<div class="thumb">🥾</div>' +
+        '<div class="info">' +
+          '<div class="top"><span class="title">' + fmtDateShort(tr.startTime) + '</span></div>' +
+          '<div class="meta">' + fmtDuration(tr.endTime - tr.startTime) + ' · ' + (tr.distance/1000).toFixed(1).replace('.', ',') + ' km</div>' +
+        '</div>' +
+        '<div class="list-actions">' +
+          '<button data-act="goto" title="Toon op kaart">📍</button>' +
+          '<button data-act="del" title="Verwijder">🗑️</button>' +
+        '</div>';
+      card.querySelector('[data-act=goto]').addEventListener('click', () => {
+        closeAllSheets();
+        if (shownTrackLayer) map.removeLayer(shownTrackLayer);
+        const latlngs = tr.points.map(p => [p[0], p[1]]);
+        shownTrackLayer = L.polyline(latlngs, { color:'#1e6fd9', weight:4, opacity:.9 }).addTo(map);
+        map.fitBounds(shownTrackLayer.getBounds(), { padding:[30,30] });
+      });
+      card.querySelector('[data-act=del]').addEventListener('click', async () => {
+        if (!(await appConfirm('Dit spoor verwijderen?'))) return;
+        await idbDelete('tracks', tr.id);
+        tracks = tracks.filter(t => t.id !== tr.id);
+        renderTracksList();
+      });
+      el.appendChild(card);
+    });
+  }
+
+  /* ---------- Add wild sheet ---------- */
+  const speciesGrid = document.getElementById('speciesGrid');
+  SPECIES.forEach(sp => {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.textContent = sp;
+    chip.addEventListener('click', () => {
+      selectedSpecies = sp;
+      document.getElementById('speciesOther').value = '';
+      [...speciesGrid.children].forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+    });
+    speciesGrid.appendChild(chip);
+  });
+  document.getElementById('speciesOther').addEventListener('input', () => {
+    selectedSpecies = null;
+    [...speciesGrid.children].forEach(c => c.classList.remove('active'));
+  });
+
+  function updateGpsUi(coords, coordsElId, accElId, badgeElId) {
+    const coordsEl = document.getElementById(coordsElId);
+    const accEl = document.getElementById(accElId);
+    const badge = document.getElementById(badgeElId);
+    if (!coords) {
+      coordsEl.textContent = 'Positie ophalen…'; accEl.textContent = '';
+      badge.className = 'badge badge-unk'; badge.textContent = '…';
+      return;
+    }
+    coordsEl.textContent = coords.lat.toFixed(5) + ', ' + coords.lng.toFixed(5);
+    accEl.textContent = 'nauwkeurigheid ±' + Math.round(coords.accuracy) + ' m';
+    const inside = isInsideBoundary(coords.lat, coords.lng);
+    if (inside === null) { badge.className = 'badge badge-unk'; badge.textContent = 'geen grens'; }
+    else if (inside) { badge.className = 'badge badge-in'; badge.textContent = 'binnen gebied'; }
+    else { badge.className = 'badge badge-out'; badge.textContent = 'buiten gebied'; }
+  }
+
+  let wildMode = 'here'; // 'here' | 'map'
+  async function openWildSheet() {
+    pendingCoords = null; pendingPhotoBlob = null; selectedSpecies = null;
+    document.getElementById('speciesOther').value = '';
+    document.getElementById('wildNote').value = '';
+    document.getElementById('wildDate').value = new Date().toISOString().slice(0, 10);
+    [...speciesGrid.children].forEach(c => c.classList.remove('active'));
+    resetPhotoUi();
+    setWildMode('here');
+    openSheet('addwild');
+    try { pendingCoords = await getPosition(); }
+    catch (e) { toast('Kon GPS-positie niet ophalen — probeer opnieuw of ga naar buiten'); }
+    updateGpsUi(pendingCoords, 'gpsCoords', 'gpsAccuracy', 'gpsBadge');
+  }
+  function setWildMode(mode) {
+    wildMode = mode;
+    document.getElementById('wildModeHere').classList.toggle('active', mode === 'here');
+    document.getElementById('wildModeMap').classList.toggle('active', mode === 'map');
+    if (mode === 'map') {
+      closeAllSheets();
+      toast('Tik op de kaart om de plek te kiezen');
+      map.once('click', (e) => {
+        pendingCoords = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: 0 };
+        updateGpsUi(pendingCoords, 'gpsCoords', 'gpsAccuracy', 'gpsBadge');
+        openSheet('addwild');
+      });
+    } else {
+      updateGpsUi(pendingCoords, 'gpsCoords', 'gpsAccuracy', 'gpsBadge');
+    }
+  }
+  document.getElementById('wildModeHere').addEventListener('click', () => setWildMode('here'));
+  document.getElementById('wildModeMap').addEventListener('click', () => setWildMode('map'));
+  document.getElementById('btnAddWild').addEventListener('click', openWildSheet);
+  document.getElementById('btnCancelWild').addEventListener('click', closeAllSheets);
+
+  const photoDrop = document.getElementById('photoDrop');
+  const filePhoto = document.getElementById('filePhoto');
+  function resetPhotoUi() { photoDrop.className = 'photo-drop'; photoDrop.innerHTML = '📷 Foto toevoegen (camera of bestand)'; }
+  photoDrop.addEventListener('click', () => filePhoto.click());
+  filePhoto.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    pendingPhotoBlob = file;
+    const url = URL.createObjectURL(file);
+    photoDrop.className = 'photo-preview';
+    photoDrop.innerHTML = '<img src="' + url + '"><button class="remove" type="button">✕</button>';
+    photoDrop.querySelector('.remove').addEventListener('click', (ev) => {
+      ev.stopPropagation(); pendingPhotoBlob = null; resetPhotoUi();
+    });
+  });
+
+  document.getElementById('btnSaveWild').addEventListener('click', async () => {
+    if (!pendingCoords) { toast('Wacht op GPS-positie, of kies eerst een plek op de kaart'); return; }
+    const species = (document.getElementById('speciesOther').value || selectedSpecies || '').trim() || 'Onbekend';
+    const note = document.getElementById('wildNote').value.trim();
+    const dateVal = document.getElementById('wildDate').value;
+    const timestamp = dateVal ? new Date(dateVal + 'T12:00:00').getTime() : Date.now();
+    const inside = isInsideBoundary(pendingCoords.lat, pendingCoords.lng);
+    const entry = {
+      species, note, lat: pendingCoords.lat, lng: pendingCoords.lng, accuracy: pendingCoords.accuracy,
+      insideBoundary: inside, timestamp, photo: pendingPhotoBlob || null
+    };
+    const id = await idbAdd('entries', entry);
+    entry.id = id;
+    entries.push(entry);
+    addEntryMarker(entry);
+    closeAllSheets();
+    toast('Registratie bewaard');
+  });
+
+  function speciesEmoji(sp) {
+    const m = { 'Ree':'🦌','Wild zwijn':'🐗','Vos':'🦊','Fazant':'🐦','Haas':'🐇','Konijn':'🐇','Eend':'🦆','Houtduif':'🐦' };
+    return m[sp] || '📍';
+  }
+
+  function addEntryMarker(entry) {
+    const icon = L.divIcon({
+      html: '<div style="background:#d94f04;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px;">' + speciesEmoji(entry.species) + '</span></div>',
+      className:'', iconSize:[30,30], iconAnchor:[15,28]
+    });
+    const marker = L.marker([entry.lat, entry.lng], { icon }).addTo(map);
+    let popupHtml = '<strong>' + entry.species + '</strong><br>' + fmtDateShort(entry.timestamp);
+    if (entry.note) popupHtml += '<br><em>' + escapeHtml(entry.note) + '</em>';
+    if (entry.photo) {
+      const url = URL.createObjectURL(entry.photo);
+      popupHtml = '<img src="' + url + '" style="width:160px;border-radius:8px;display:block;margin-bottom:6px;">' + popupHtml;
+    }
+    marker.bindPopup(popupHtml);
+    entryMarkers[entry.id] = marker;
+  }
+  function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  async function loadEntries() { entries = await idbGetAll('entries'); entries.forEach(addEntryMarker); }
+
+  /* ---------- Tableau (dagtelling kleinwild + jaaroverzicht) ---------- */
+  const DEFAULT_TABLEAU_CATALOG = ['Haas','Konijn','Fazant','Patrijs','Wilde eend','Houtduif','Kraai','Ekster','Vlaamse gaai','Kauw','Vos'];
+  let tableauSpeciesCatalog = DEFAULT_TABLEAU_CATALOG.slice();
+  let tableauSpeciesSelected = DEFAULT_TABLEAU_CATALOG.slice();
+
+  async function loadTableauSpeciesConfig() {
+    const rec = await idbGet('settings', 'tableauSpecies');
+    if (rec && rec.value) {
+      tableauSpeciesCatalog = rec.value.catalog && rec.value.catalog.length ? rec.value.catalog : DEFAULT_TABLEAU_CATALOG.slice();
+      tableauSpeciesSelected = rec.value.selected || tableauSpeciesCatalog.slice();
+    }
+  }
+  async function saveTableauSpeciesConfig() {
+    await idbPut('settings', { key:'tableauSpecies', value: { catalog: tableauSpeciesCatalog, selected: tableauSpeciesSelected } });
+  }
+
+  function renderTableauSpeciesConfigGrid() {
+    const grid = document.getElementById('tableauSpeciesConfigGrid');
+    grid.innerHTML = '';
+    tableauSpeciesCatalog.forEach(sp => {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (tableauSpeciesSelected.includes(sp) ? ' active' : '');
+      chip.textContent = sp;
+      chip.addEventListener('click', () => {
+        if (tableauSpeciesSelected.includes(sp)) tableauSpeciesSelected = tableauSpeciesSelected.filter(s => s !== sp);
+        else tableauSpeciesSelected.push(sp);
+        chip.classList.toggle('active');
+      });
+      grid.appendChild(chip);
+    });
+  }
+  document.getElementById('btnEditTableauSpecies').addEventListener('click', () => {
+    renderTableauSpeciesConfigGrid();
+    openSheet('tableauspecies');
+  });
+  document.getElementById('btnCancelTableauSpecies').addEventListener('click', () => openSheet('tableau'));
+  document.getElementById('btnAddTableauSpecies').addEventListener('click', () => {
+    const name = document.getElementById('tableauNewSpeciesInput').value.trim();
+    if (!name) return;
+    if (!tableauSpeciesCatalog.includes(name)) tableauSpeciesCatalog.push(name);
+    if (!tableauSpeciesSelected.includes(name)) tableauSpeciesSelected.push(name);
+    document.getElementById('tableauNewSpeciesInput').value = '';
+    renderTableauSpeciesConfigGrid();
+  });
+  document.getElementById('btnSaveTableauSpecies').addEventListener('click', async () => {
+    if (tableauSpeciesSelected.length === 0) { toast('Kies minstens één soort'); return; }
+    await saveTableauSpeciesConfig();
+    toast('Soortenlijst bewaard');
+    openSheet('tableau');
+  });
+
+  function seasonLabelForDate(d) {
+    const dt = new Date(d);
+    const y = dt.getFullYear(), m = dt.getMonth() + 1; // 1-12
+    return m >= 7 ? (y + '-' + (y + 1)) : ((y - 1) + '-' + y);
+  }
+  function currentSeasonLabel() { return seasonLabelForDate(Date.now()); }
+
+  async function loadTableaus() { tableaus = await idbGetAll('tableaus'); }
+
+  function buildTableauSpeciesRows(existingCounts) {
+    const el = document.getElementById('tableauSpeciesRows');
+    el.innerHTML = '';
+    tableauSpeciesSelected.forEach(sp => {
+      tableauFormCounts[sp] = (existingCounts && existingCounts[sp]) || 0;
+      const row = document.createElement('div');
+      row.className = 'stepper-row';
+      row.innerHTML =
+        '<span class="species">' + speciesEmoji(sp) + ' ' + sp + '</span>' +
+        '<div class="stepper-controls">' +
+          '<button type="button" class="stepper-btn" data-act="min">−</button>' +
+          '<span class="stepper-value" id="stepval-' + sp + '">' + tableauFormCounts[sp] + '</span>' +
+          '<button type="button" class="stepper-btn" data-act="plu">+</button>' +
+        '</div>';
+      row.querySelector('[data-act=min]').addEventListener('click', () => {
+        tableauFormCounts[sp] = Math.max(0, tableauFormCounts[sp] - 1);
+        document.getElementById('stepval-' + sp).textContent = tableauFormCounts[sp];
+      });
+      row.querySelector('[data-act=plu]').addEventListener('click', () => {
+        tableauFormCounts[sp] = tableauFormCounts[sp] + 1;
+        document.getElementById('stepval-' + sp).textContent = tableauFormCounts[sp];
+      });
+      el.appendChild(row);
+    });
+  }
+
+  let pendingTableauPhotoBlob = null;
+  const tableauPhotoDrop = document.getElementById('tableauPhotoDrop');
+  const tableauFilePhoto = document.getElementById('tableauFilePhoto');
+  function resetTableauPhotoUi() { tableauPhotoDrop.className = 'photo-drop'; tableauPhotoDrop.innerHTML = '📷 Foto toevoegen (bv. groepsfoto van het tableau)'; }
+  tableauPhotoDrop.addEventListener('click', () => tableauFilePhoto.click());
+  tableauFilePhoto.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    pendingTableauPhotoBlob = file;
+    const url = URL.createObjectURL(file);
+    tableauPhotoDrop.className = 'photo-preview';
+    tableauPhotoDrop.innerHTML = '<img src="' + url + '"><button class="remove" type="button">✕</button>';
+    tableauPhotoDrop.querySelector('.remove').addEventListener('click', (ev) => {
+      ev.stopPropagation(); pendingTableauPhotoBlob = null; resetTableauPhotoUi();
+    });
+  });
+
+  let editingTableauId = null;
+  let editingTableauExistingOtherSpecies = null;
+
+  function openTableauAddSheet(existingRecord) {
+    editingTableauId = existingRecord ? existingRecord.id : null;
+    const knownCounts = {};
+    let otherSp = '', otherCount = '';
+    if (existingRecord) {
+      Object.keys(existingRecord.counts).forEach(sp => {
+        if (tableauSpeciesSelected.includes(sp)) knownCounts[sp] = existingRecord.counts[sp];
+        else { otherSp = sp; otherCount = existingRecord.counts[sp]; } // first non-catalog species goes in the "andere" field
+      });
+    }
+    buildTableauSpeciesRows(knownCounts);
+    document.getElementById('tableauDate').value = new Date(existingRecord ? existingRecord.date : Date.now()).toISOString().slice(0, 10);
+    document.getElementById('tableauOtherSpecies').value = otherSp;
+    document.getElementById('tableauOtherCount').value = otherCount;
+    document.getElementById('tableauNote').value = existingRecord ? (existingRecord.note || '') : '';
+    pendingTableauPhotoBlob = existingRecord ? (existingRecord.photo || null) : null;
+    if (pendingTableauPhotoBlob) {
+      const url = URL.createObjectURL(pendingTableauPhotoBlob);
+      tableauPhotoDrop.className = 'photo-preview';
+      tableauPhotoDrop.innerHTML = '<img src="' + url + '"><button class="remove" type="button">✕</button>';
+      tableauPhotoDrop.querySelector('.remove').addEventListener('click', (ev) => {
+        ev.stopPropagation(); pendingTableauPhotoBlob = null; resetTableauPhotoUi();
+      });
+    } else {
+      resetTableauPhotoUi();
+    }
+    document.querySelector('#sheetTableauAdd h2').textContent = existingRecord ? 'Tableau aanpassen' : 'Tableau invullen';
+    openSheet('addtableau');
+  }
+  document.getElementById('btnAddTableau').addEventListener('click', () => openTableauAddSheet(null));
+  document.getElementById('btnCancelTableau').addEventListener('click', closeAllSheets);
+
+  document.getElementById('btnSaveTableau').addEventListener('click', async () => {
+    const dateVal = document.getElementById('tableauDate').value;
+    if (!dateVal) { toast('Kies een datum'); return; }
+    const counts = {};
+    tableauSpeciesSelected.forEach(sp => { if (tableauFormCounts[sp] > 0) counts[sp] = tableauFormCounts[sp]; });
+    const otherSp = document.getElementById('tableauOtherSpecies').value.trim();
+    const otherCount = parseInt(document.getElementById('tableauOtherCount').value, 10);
+    if (otherSp && otherCount > 0) counts[otherSp] = (counts[otherSp] || 0) + otherCount;
+    if (Object.keys(counts).length === 0) { toast('Vul minstens één aantal in'); return; }
+    const note = document.getElementById('tableauNote').value.trim();
+    if (editingTableauId) {
+      const record = { id: editingTableauId, date: new Date(dateVal + 'T12:00:00').getTime(), counts, note, photo: pendingTableauPhotoBlob || null, timestamp: Date.now() };
+      await idbPut('tableaus', record);
+      tableaus = tableaus.map(t => t.id === editingTableauId ? record : t);
+      toast('Tableau bijgewerkt');
+    } else {
+      const record = { date: new Date(dateVal + 'T12:00:00').getTime(), counts, note, photo: pendingTableauPhotoBlob || null, timestamp: Date.now() };
+      const id = await idbAdd('tableaus', record);
+      record.id = id;
+      tableaus.push(record);
+      toast('Tableau bewaard');
+    }
+    closeAllSheets();
+    renderTableau();
+  });
+
+  let tableauPeriod = 'current';
+  document.querySelectorAll('#tableauPeriodChips .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      tableauPeriod = chip.getAttribute('data-period');
+      document.querySelectorAll('#tableauPeriodChips .chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      document.getElementById('tableauSeasonSelect').style.display = 'none';
+      renderTableau();
+    });
+  });
+  document.getElementById('tableauSeasonSelect').addEventListener('change', (e) => {
+    tableauPeriod = e.target.value;
+    document.querySelectorAll('#tableauPeriodChips .chip').forEach(c => c.classList.remove('active'));
+    renderTableau();
+  });
+
+  function tableauMatchesPeriod(dateMs) {
+    if (tableauPeriod === 'all') return true;
+    if (tableauPeriod === 'current') return seasonLabelForDate(dateMs) === currentSeasonLabel();
+    return seasonLabelForDate(dateMs) === tableauPeriod;
+  }
+
+  function renderTableau() {
+    const select = document.getElementById('tableauSeasonSelect');
+    const allSeasonDates = entries.map(en => en.timestamp).concat(tableaus.map(t => t.date));
+    const seasons = Array.from(new Set(allSeasonDates.map(seasonLabelForDate))).sort().reverse();
+    select.innerHTML = '<option value="" disabled selected>Kies een ander seizoen…</option>' +
+      seasons.map(s => '<option value="' + s + '">Seizoen ' + s + '</option>').join('');
+    select.style.display = seasons.length ? '' : 'none';
+
+    const filteredEntries = entries.filter(en => tableauMatchesPeriod(en.timestamp));
+    const filteredTableaus = tableaus.filter(t => tableauMatchesPeriod(t.date));
+    const periodLabel = tableauPeriod === 'all' ? 'Alle registraties' : 'Seizoen ' + (tableauPeriod === 'current' ? currentSeasonLabel() : tableauPeriod);
+
+    const counts = {};
+    filteredEntries.forEach(en => { counts[en.species] = (counts[en.species] || 0) + 1; });
+    filteredTableaus.forEach(t => { Object.keys(t.counts).forEach(sp => { counts[sp] = (counts[sp] || 0) + t.counts[sp]; }); });
+
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    document.getElementById('tableauSubtitle').textContent = periodLabel + ' · ' + total + ' stuks totaal';
+
+    const rows = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const content = document.getElementById('tableauContent');
+    if (rows.length === 0) {
+      content.innerHTML = '<div class="empty-state"><div class="emoji">📊</div>Nog geen wild geregistreerd in deze periode.</div>';
+    } else {
+      content.innerHTML = rows.map(sp =>
+        '<div class="tableau-row"><span class="species">' + speciesEmoji(sp) + ' ' + escapeHtml(sp) + '</span><span class="count">' + counts[sp] + '</span></div>'
+      ).join('') + '<div class="tableau-total"><span>Totaal</span><span>' + total + '</span></div>';
+    }
+
+    const daysList = document.getElementById('tableauDaysList');
+    const sortedDays = filteredTableaus.slice().sort((a, b) => b.date - a.date);
+    if (sortedDays.length === 0) {
+      daysList.innerHTML = '<div class="hint">Nog geen jachtdagen ingevoerd in deze periode.</div>';
+    } else {
+      daysList.innerHTML = '';
+      sortedDays.forEach(t => {
+        const summary = Object.keys(t.counts).map(sp => t.counts[sp] + ' ' + sp).join(', ');
+        const card = document.createElement('div');
+        card.className = 'list-card';
+        const thumbHtml = t.photo
+          ? '<img class="thumb" src="' + URL.createObjectURL(t.photo) + '">'
+          : '<div class="thumb">📊</div>';
+        card.innerHTML =
+          thumbHtml +
+          '<div class="info">' +
+            '<div class="top"><span class="title">' + new Date(t.date).toLocaleDateString('nl-BE', { day:'2-digit', month:'2-digit', year:'numeric' }) + '</span></div>' +
+            '<div class="meta">' + escapeHtml(summary) + '</div>' +
+            (t.note ? '<div class="note">' + escapeHtml(t.note) + '</div>' : '') +
+          '</div>' +
+          '<div class="list-actions"><button data-act="edit" title="Bewerk">✏️</button><button data-act="del" title="Verwijder">🗑️</button></div>';
+        card.querySelector('[data-act=edit]').addEventListener('click', () => openTableauAddSheet(t));
+        card.querySelector('[data-act=del]').addEventListener('click', async () => {
+          if (!(await appConfirm('Dit tableau verwijderen?'))) return;
+          await idbDelete('tableaus', t.id);
+          tableaus = tableaus.filter(x => x.id !== t.id);
+          renderTableau();
+        });
+        daysList.appendChild(card);
+      });
+    }
+  }
+
+  function renderWildList() {
+    const listEl = document.getElementById('wildListEl');
+    document.getElementById('wildListSubtitle').textContent = entries.length + ' registratie' + (entries.length === 1 ? '' : 's');
+    if (entries.length === 0) {
+      listEl.innerHTML = '<div class="empty-state"><div class="emoji">🌲</div>Nog geen wild geregistreerd.<br>Tik op de oranje "+ Wild" knop om te beginnen.</div>';
+      return;
+    }
+    const sorted = entries.slice().sort((a,b) => b.timestamp - a.timestamp);
+    listEl.innerHTML = '';
+    sorted.forEach(entry => {
+      const card = document.createElement('div');
+      card.className = 'list-card';
+      const thumbHtml = entry.photo
+        ? '<img class="thumb" src="' + URL.createObjectURL(entry.photo) + '">'
+        : '<div class="thumb">' + speciesEmoji(entry.species) + '</div>';
+      card.innerHTML = thumbHtml +
+        '<div class="info">' +
+          '<div class="top"><span class="title">' + entry.species + '</span></div>' +
+          '<div class="meta">' + fmtDateShort(entry.timestamp) + ' · ' + entry.lat.toFixed(4) + ', ' + entry.lng.toFixed(4) + '</div>' +
+          (entry.note ? '<div class="note">' + escapeHtml(entry.note) + '</div>' : '') +
+        '</div>' +
+        '<div class="list-actions">' +
+          '<button data-act="goto" title="Toon op kaart">📍</button>' +
+          '<button data-act="del" title="Verwijder">🗑️</button>' +
+        '</div>';
+      card.querySelector('[data-act=goto]').addEventListener('click', () => {
+        closeAllSheets(); map.setView([entry.lat, entry.lng], 17);
+        if (entryMarkers[entry.id]) entryMarkers[entry.id].openPopup();
+      });
+      card.querySelector('[data-act=del]').addEventListener('click', async () => {
+        if (!(await appConfirm('Deze registratie verwijderen?'))) return;
+        await idbDelete('entries', entry.id);
+        entries = entries.filter(en => en.id !== entry.id);
+        if (entryMarkers[entry.id]) { map.removeLayer(entryMarkers[entry.id]); delete entryMarkers[entry.id]; }
+        renderWildList();
+      });
+      listEl.appendChild(card);
+    });
+  }
+
+  /* ---------- Markers (hoogzit, voederplaats, ...) ---------- */
+  const GENERIC_MARKER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.2"/></svg>';
+  let customMarkerTypes = [];
+  function allMarkerTypes() { return MARKER_TYPES.concat(customMarkerTypes); }
+  async function loadCustomMarkerTypes() {
+    const rec = await idbGet('settings', 'customMarkerTypes');
+    if (rec && rec.value) customMarkerTypes = rec.value;
+  }
+  async function saveCustomMarkerTypes() {
+    await idbPut('settings', { key: 'customMarkerTypes', value: customMarkerTypes });
+  }
+  const markerTypeGrid = document.getElementById('markerTypeGrid');
+  function buildMarkerTypeGrid() {
+    markerTypeGrid.innerHTML = '';
+    allMarkerTypes().forEach(mt => {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (selectedMarkerType === mt.key ? ' active' : '');
+      chip.innerHTML = '<span style="display:inline-flex;width:15px;height:15px;vertical-align:-3px;margin-right:4px;">' + mt.svg + '</span>' + mt.label;
+      chip.addEventListener('click', () => {
+        selectedMarkerType = mt.key;
+        [...markerTypeGrid.children].forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+      });
+      markerTypeGrid.appendChild(chip);
+    });
+  }
+  buildMarkerTypeGrid();
+  document.getElementById('btnAddMarkerType').addEventListener('click', async () => {
+    const input = document.getElementById('newMarkerTypeInput');
+    const name = input.value.trim();
+    if (!name) return;
+    const key = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_' + Date.now();
+    customMarkerTypes.push({ key, label: name, svg: GENERIC_MARKER_SVG });
+    await saveCustomMarkerTypes();
+    input.value = '';
+    selectedMarkerType = key;
+    buildMarkerTypeGrid();
+    toast('Type "' + name + '" toegevoegd');
+  });
+
+  const markerModeHere = document.getElementById('markerModeHere');
+  const markerModeMap = document.getElementById('markerModeMap');
+  markerModeHere.addEventListener('click', () => setMarkerMode('here'));
+  markerModeMap.addEventListener('click', () => setMarkerMode('map'));
+
+  function setMarkerMode(mode) {
+    markerMode = mode;
+    markerModeHere.classList.toggle('active', mode === 'here');
+    markerModeMap.classList.toggle('active', mode === 'map');
+    if (mode === 'map') {
+      closeAllSheets();
+      toast('Tik op de kaart om de plek te kiezen');
+      map.once('click', (e) => {
+        markerPendingCoords = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: 0 };
+        updateGpsUi(markerPendingCoords, 'markerCoords', 'markerAccuracy', 'markerBadge');
+        openSheet('addmarker');
+      });
+    } else {
+      updateGpsUi(markerPendingCoords, 'markerCoords', 'markerAccuracy', 'markerBadge');
+    }
+  }
+
+  async function openMarkerSheet() {
+    markerPendingCoords = null; selectedMarkerType = null;
+    document.getElementById('markerNote').value = '';
+    [...markerTypeGrid.children].forEach(c => c.classList.remove('active'));
+    setMarkerMode('here');
+    updateGpsUi(null, 'markerCoords', 'markerAccuracy', 'markerBadge');
+    openSheet('addmarker');
+    try { markerPendingCoords = await getPosition(); }
+    catch (e) { toast('Kon GPS-positie niet ophalen'); }
+    updateGpsUi(markerPendingCoords, 'markerCoords', 'markerAccuracy', 'markerBadge');
+  }
+  document.getElementById('btnAddMarker').addEventListener('click', openMarkerSheet);
+  document.getElementById('btnCancelMarker').addEventListener('click', closeAllSheets);
+
+  document.getElementById('btnSaveMarker').addEventListener('click', async () => {
+    if (!markerPendingCoords) { toast('Wacht op positie of kies een plek op de kaart'); return; }
+    if (!selectedMarkerType) { toast('Kies een type markering'); return; }
+    const note = document.getElementById('markerNote').value.trim();
+    const mrk = {
+      type: selectedMarkerType, note, lat: markerPendingCoords.lat, lng: markerPendingCoords.lng, timestamp: Date.now()
+    };
+    const id = await idbAdd('markers', mrk);
+    mrk.id = id;
+    markers.push(mrk);
+    addMarkerMarker(mrk);
+    closeAllSheets();
+    toast('Markering bewaard');
+  });
+
+  function markerTypeInfo(key) { return allMarkerTypes().find(m => m.key === key) || MARKER_TYPES[MARKER_TYPES.length-1]; }
+
+  function addMarkerMarker(mrk) {
+    const info = markerTypeInfo(mrk.type);
+    const icon = L.divIcon({
+      html: '<div style="background:#fff;border:2px solid #3f5c3f;box-shadow:0 1px 4px rgba(0,0,0,.35);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#3f5c3f;"><span style="width:16px;height:16px;display:block;">' + info.svg + '</span></div>',
+      className:'', iconSize:[28,28], iconAnchor:[14,14]
+    });
+    const marker = L.marker([mrk.lat, mrk.lng], { icon }).addTo(map);
+    let popupHtml = '<strong>' + info.label + '</strong>';
+    if (mrk.note) popupHtml += '<br><em>' + escapeHtml(mrk.note) + '</em>';
+    marker.bindPopup(popupHtml);
+    markerMarkers[mrk.id] = marker;
+  }
+
+  async function loadMarkers() { markers = await idbGetAll('markers'); markers.forEach(addMarkerMarker); }
+
+  function renderMarkersList() {
+    const el = document.getElementById('markersListEl');
+    document.getElementById('markersListSubtitle').textContent = markers.length + ' markering' + (markers.length === 1 ? '' : 'en');
+    if (markers.length === 0) {
+      el.innerHTML = '<div class="empty-state"><div class="emoji">📍</div>Nog geen markeringen.<br>Voeg hoogzit, voederplaats of parking toe via de "Marker" knop.</div>';
+      return;
+    }
+    const sorted = markers.slice().sort((a,b) => b.timestamp - a.timestamp);
+    el.innerHTML = '';
+    sorted.forEach(mrk => {
+      const info = markerTypeInfo(mrk.type);
+      const card = document.createElement('div');
+      card.className = 'list-card';
+      card.innerHTML =
+        '<div class="thumb" style="color:#3f5c3f;"><span style="width:22px;height:22px;display:block;">' + info.svg + '</span></div>' +
+        '<div class="info">' +
+          '<div class="top"><span class="title">' + info.label + '</span></div>' +
+          '<div class="meta">' + fmtDateShort(mrk.timestamp) + ' · ' + mrk.lat.toFixed(4) + ', ' + mrk.lng.toFixed(4) + '</div>' +
+          (mrk.note ? '<div class="note">' + escapeHtml(mrk.note) + '</div>' : '') +
+        '</div>' +
+        '<div class="list-actions">' +
+          '<button data-act="goto" title="Toon op kaart">📍</button>' +
+          '<button data-act="del" title="Verwijder">🗑️</button>' +
+        '</div>';
+      card.querySelector('[data-act=goto]').addEventListener('click', () => {
+        closeAllSheets(); map.setView([mrk.lat, mrk.lng], 17);
+        if (markerMarkers[mrk.id]) markerMarkers[mrk.id].openPopup();
+      });
+      card.querySelector('[data-act=del]').addEventListener('click', async () => {
+        if (!(await appConfirm('Deze markering verwijderen?'))) return;
+        await idbDelete('markers', mrk.id);
+        markers = markers.filter(m => m.id !== mrk.id);
+        if (markerMarkers[mrk.id]) { map.removeLayer(markerMarkers[mrk.id]); delete markerMarkers[mrk.id]; }
+        renderMarkersList();
+      });
+      el.appendChild(card);
+    });
+  }
+
+  /* ---------- Weather + sun/moon ---------- */
+  const WMO = {
+    0:['Helder','☀️'],1:['Overwegend helder','🌤️'],2:['Half bewolkt','⛅'],3:['Bewolkt','☁️'],
+    45:['Mist','🌫️'],48:['Rijmmist','🌫️'],
+    51:['Lichte motregen','🌦️'],53:['Motregen','🌦️'],55:['Zware motregen','🌧️'],
+    61:['Lichte regen','🌦️'],63:['Regen','🌧️'],65:['Zware regen','🌧️'],
+    71:['Lichte sneeuw','🌨️'],73:['Sneeuw','🌨️'],75:['Zware sneeuw','❄️'],
+    80:['Regenbuien','🌦️'],81:['Buien','🌧️'],82:['Zware buien','⛈️'],
+    95:['Onweer','⛈️'],96:['Onweer met hagel','⛈️'],99:['Zwaar onweer','⛈️']
+  };
+  function wmoInfo(code) { return WMO[code] || ['Onbekend','🌡️']; }
+  function fmtTime(d) { return d.toLocaleTimeString('nl-BE', { hour:'2-digit', minute:'2-digit' }); }
+  function fmtDayShort(d) { return d.toLocaleDateString('nl-BE', { weekday:'short' }); }
+
+  async function fetchOpenMeteoCurrent(lat, lng, extraParams) {
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat.toFixed(4) + '&longitude=' + lng.toFixed(4) +
+      '&current=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m,weather_code' +
+      (extraParams || '') + '&timezone=auto';
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('Weerdienst niet bereikbaar');
+    return await resp.json();
+  }
+
+  async function loadWeatherPanel() {
+    const content = document.getElementById('weatherContent');
+    content.innerHTML = '<div class="hint">Gegevens ophalen…</div>';
+    let lat, lng;
+    try {
+      const pos = await getPosition();
+      lat = pos.lat; lng = pos.lng;
+      document.getElementById('weatherLocLabel').textContent = 'Op basis van je huidige locatie';
+    } catch (e) {
+      if (boundaryLatLngs && boundaryLatLngs.length) {
+        const pts = boundaryLatLngs.flat();
+        lat = pts.reduce((s,p)=>s+p[0],0)/pts.length;
+        lng = pts.reduce((s,p)=>s+p[1],0)/pts.length;
+        document.getElementById('weatherLocLabel').textContent = 'Op basis van je jachtgebied (geen GPS beschikbaar)';
+      } else {
+        const c = map.getCenter(); lat = c.lat; lng = c.lng;
+        document.getElementById('weatherLocLabel').textContent = 'Op basis van het midden van de kaart';
+      }
+    }
+
+    // Sun / moon via SunCalc (fully offline, no network needed)
+    let sunHtml = '';
+    try {
+      const now = new Date();
+      const sunTimes = SunCalc.getTimes(now, lat, lng);
+      const moonTimes = SunCalc.getMoonTimes(now, lat, lng);
+      const moonIllum = SunCalc.getMoonIllumination(now);
+      sunHtml += '<div class="sun-grid">' +
+        '<div class="sun-card"><div class="label">Zonsopgang</div><div class="value">' + fmtTime(sunTimes.sunrise) + '</div></div>' +
+        '<div class="sun-card"><div class="label">Zonsondergang</div><div class="value">' + fmtTime(sunTimes.sunset) + '</div></div>' +
+        '<div class="sun-card"><div class="label">Ochtendschemering</div><div class="value">' + fmtTime(sunTimes.dawn) + '</div></div>' +
+        '<div class="sun-card"><div class="label">Avondschemering</div><div class="value">' + fmtTime(sunTimes.dusk) + '</div></div>' +
+        '<div class="sun-card"><div class="label">Maanopkomst</div><div class="value">' + (moonTimes.rise ? fmtTime(moonTimes.rise) : '—') + '</div></div>' +
+        '<div class="sun-card"><div class="label">Maanondergang</div><div class="value">' + (moonTimes.set ? fmtTime(moonTimes.set) : '—') + '</div></div>' +
+        '</div>';
+      const illumPct = Math.round(moonIllum.fraction * 100);
+      sunHtml += '<div class="best-times">' +
+        '<div class="t">🎯 Beste momenten vandaag</div>' +
+        '<div class="row"><span>Ochtend</span><b>' + fmtTime(sunTimes.dawn) + ' – ' + fmtTime(new Date(sunTimes.sunrise.getTime()+45*60000)) + '</b></div>' +
+        '<div class="row"><span>Avond</span><b>' + fmtTime(new Date(sunTimes.sunset.getTime()-45*60000)) + ' – ' + fmtTime(sunTimes.dusk) + '</b></div>' +
+        '<div class="row"><span>Maanverlichting</span><b>' + illumPct + '%</b></div>' +
+        '</div>' +
+        '<div class="hint" style="margin-bottom:16px;">Wild is doorgaans het actiefst rond schemering. Maanstand kan dit beïnvloeden maar is minder bepalend.</div>';
+    } catch (e) {
+      sunHtml = '<div class="hint" style="margin-bottom:16px;">Kon zon/maan-gegevens niet berekenen.</div>';
+    }
+
+    content.innerHTML = sunHtml + '<div class="hint">Weer laden…</div>';
+
+    // Weather via Open-Meteo (free, EU-based, no API key) — needs internet connection
+    try {
+      const data = await fetchOpenMeteoCurrent(lat, lng, '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=5');
+      const cur = data.current;
+      lastWindData = { speed: cur.wind_speed_10m, dir: cur.wind_direction_10m, at: Date.now() };
+      const [curDesc, curIcon] = wmoInfo(cur.weather_code);
+      let weatherHtml = '<div class="weather-now">' +
+        '<div class="icon">' + curIcon + '</div>' +
+        '<div><div class="temp">' + Math.round(cur.temperature_2m) + '°C</div>' +
+        '<div class="desc">' + curDesc + ' · wind ' + Math.round(cur.wind_speed_10m) + ' km/u</div></div>' +
+        '</div>';
+      weatherHtml += '<div class="weather-days">';
+      for (let i = 0; i < data.daily.time.length; i++) {
+        const d = new Date(data.daily.time[i]);
+        const [desc, icon] = wmoInfo(data.daily.weather_code[i]);
+        weatherHtml += '<div class="weather-day">' +
+          '<div class="d">' + (i===0?'Vandaag':fmtDayShort(d)) + '</div>' +
+          '<div class="i">' + icon + '</div>' +
+          '<div class="t">' + Math.round(data.daily.temperature_2m_max[i]) + '° <span>' + Math.round(data.daily.temperature_2m_min[i]) + '°</span></div>' +
+          '</div>';
+      }
+      weatherHtml += '</div>';
+      content.innerHTML = sunHtml + weatherHtml;
+    } catch (e) {
+      content.innerHTML = sunHtml + '<div class="hint">Geen internetverbinding — weerdata niet beschikbaar. Zon-/maantijden werken wel altijd offline.</div>';
+    }
+  }
+
+  /* ---------- Export / import all data ---------- */
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  function base64ToBlob(dataUrl) { return fetch(dataUrl).then(r => r.blob()); }
+
+  document.getElementById('btnExport').addEventListener('click', async () => {
+    toast('Bestand wordt voorbereid…');
+    const exportEntries = [];
+    for (const en of entries) {
+      exportEntries.push({
+        species: en.species, note: en.note, lat: en.lat, lng: en.lng,
+        accuracy: en.accuracy, insideBoundary: en.insideBoundary, timestamp: en.timestamp,
+        photoBase64: en.photo ? await blobToBase64(en.photo) : null
+      });
+    }
+    const exportTableaus = [];
+    for (const t of tableaus) {
+      exportTableaus.push({
+        date: t.date, counts: t.counts, note: t.note, timestamp: t.timestamp,
+        photoBase64: t.photo ? await blobToBase64(t.photo) : null
+      });
+    }
+    const payload = {
+      type: 'jachtlogboek-export', version: 2, exportedAt: new Date().toISOString(),
+      boundary: boundaryLatLngs, jachtgebieden: jachtgebieden, activeGebiedId: activeGebiedId, entries: exportEntries,
+      markers: markers.map(m => ({ type:m.type, note:m.note, lat:m.lat, lng:m.lng, timestamp:m.timestamp })),
+      tracks: tracks.map(t => ({ points:t.points, startTime:t.startTime, endTime:t.endTime, distance:t.distance })),
+      tableaus: exportTableaus
+    };
+    const filename = 'jachtlogboek-' + new Date().toISOString().slice(0,10) + '.json';
+    const jsonStr = JSON.stringify(payload, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('Bestand gedownload: ' + filename);
+  });
+
+  document.getElementById('btnImport').addEventListener('click', () => document.getElementById('fileImportData').click());
+  document.getElementById('fileImportData').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      if (Array.isArray(payload.jachtgebieden) && payload.jachtgebieden.length) {
+        jachtgebieden = payload.jachtgebieden;
+        activeGebiedId = (payload.activeGebiedId && jachtgebieden.some(g => g.id === payload.activeGebiedId)) ? payload.activeGebiedId : jachtgebieden[0].id;
+        boundaryLatLngs = getActiveGebied().zones;
+        await saveGebieden();
+        renderGebiedSelect();
+        renderBoundary();
+      } else if (payload.boundary) { boundaryLatLngs = payload.boundary; await saveBoundary(); renderBoundary(); }
+      if (Array.isArray(payload.entries)) {
+        for (const en of payload.entries) {
+          const photo = en.photoBase64 ? await base64ToBlob(en.photoBase64) : null;
+          const entry = { species: en.species, note: en.note, lat: en.lat, lng: en.lng, accuracy: en.accuracy, insideBoundary: en.insideBoundary, timestamp: en.timestamp, photo };
+          const id = await idbAdd('entries', entry);
+          entry.id = id; entries.push(entry); addEntryMarker(entry);
+        }
+      }
+      if (Array.isArray(payload.markers)) {
+        for (const m of payload.markers) {
+          const id = await idbAdd('markers', m);
+          m.id = id; markers.push(m); addMarkerMarker(m);
+        }
+      }
+      if (Array.isArray(payload.tracks)) {
+        for (const t of payload.tracks) {
+          const id = await idbAdd('tracks', t);
+          t.id = id; tracks.push(t);
+        }
+      }
+      if (Array.isArray(payload.tableaus)) {
+        for (const t of payload.tableaus) {
+          const photo = t.photoBase64 ? await base64ToBlob(t.photoBase64) : null;
+          const record = { date: t.date, counts: t.counts, note: t.note, timestamp: t.timestamp, photo };
+          const id = await idbAdd('tableaus', record);
+          record.id = id; tableaus.push(record);
+        }
+      }
+      toast('Import voltooid');
+    } catch (err) {
+      toast('Kon bestand niet importeren: ' + err.message);
+    }
+    e.target.value = '';
+  });
+
+  /* ---------- Init ---------- */
+  (async function init() {
+    await loadBoundary();
+    await loadEntries();
+    await loadMarkers();
+    await loadTracks();
+    await loadTableaus();
+    await loadTableauSpeciesConfig();
+    await loadCustomMarkerTypes();
+    buildMarkerTypeGrid();
+    try {
+      const pos = await getPosition();
+      map.setView([pos.lat, pos.lng], 14);
+    } catch (e) { /* keep default view */ }
+  })();
+
+})();
+</script>
+</body>
+</html>
