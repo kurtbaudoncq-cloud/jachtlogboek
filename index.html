@@ -114,6 +114,30 @@
   .wind-text strong{ font-size:15px; }
   .wind-text span{ font-size:11px; color:var(--parchment-dim); }
 
+  .overlay-controls{
+    position:absolute; left:12px; right:12px; bottom:calc(96px + var(--safe-bottom)); z-index:650;
+    background:rgba(16,28,19,.95); color:var(--parchment); border:1px solid var(--forest-600);
+    border-radius:14px; padding:14px; box-shadow:0 6px 18px rgba(0,0,0,.35);
+  }
+  .overlay-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-size:13px; }
+  .overlay-row input[type=range]{ flex:1; margin-left:10px; }
+  .overlay-controls .btn-row{ margin-top:0; }
+
+  .search-result{
+    background:#fff; border:1px solid var(--paper-line); border-radius:10px; padding:10px 12px;
+    margin-bottom:6px; font-size:13.5px; cursor:pointer;
+  }
+  .search-result:active{ background:var(--parchment-dim); }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(16,20,14,.55); z-index:2000;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .modal-box{
+    background:var(--parchment); border-radius:16px; padding:22px; max-width:360px; width:100%;
+    box-shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+
   /* bottom sheets */
   .sheet-overlay{
     position:fixed; inset:0; background:rgba(16,20,14,.45); z-index:900;
@@ -329,7 +353,7 @@
   <div class="draw-banner" id="drawBanner">
     <span id="drawBannerTxt">Tik op de kaart om de grens te tekenen</span>
     <div class="actions">
-      <button id="drawUndo">Punt terug</button>
+      <button id="drawUndo">↩️ Ongedaan maken</button>
       <button id="drawCancel">Annuleer</button>
       <button class="done" id="drawFinish">Klaar</button>
     </div>
@@ -349,6 +373,18 @@
     </div>
   </div>
 
+  <div class="overlay-controls" id="overlayControls" style="display:none;">
+    <div class="overlay-row">
+      <span>Doorzichtigheid</span>
+      <input type="range" id="overlayOpacity" min="10" max="100" value="70">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-outline" id="btnRemoveOverlay">Verwijder</button>
+      <button class="btn btn-primary" id="btnDoneOverlay">✓ Klaar — begin tekenen</button>
+    </div>
+    <div class="hint" style="margin-top:8px; color:var(--parchment-dim);">Versleep de twee ronde punten om je foto uit te lijnen met de echte kaart eronder.</div>
+  </div>
+
   <div class="fab-bar">
     <button class="pill-btn" id="btnAddMarker">📍 Marker</button>
     <button class="fab-main" id="btnAddWild"><span class="plus">＋</span>Wild</button>
@@ -356,6 +392,16 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div class="modal-overlay" id="confirmModalOverlay" style="display:none;">
+    <div class="modal-box">
+      <div id="confirmModalMessage" style="margin-bottom:18px; font-size:15px; line-height:1.45; color:var(--ink); white-space:pre-line;"></div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="confirmModalCancel">Annuleren</button>
+        <button class="btn" id="confirmModalOk" style="background:var(--danger); color:#fff; flex:1;">Bevestigen</button>
+      </div>
+    </div>
+  </div>
 
   <div class="sheet-overlay" id="overlay"></div>
 
@@ -405,6 +451,20 @@
       🔒 Dit jachtgebied is vergrendeld. Ontgrendel eerst om te tekenen, importeren of wissen.
     </div>
     <div class="divider"></div>
+    <button class="btn btn-secondary" id="btnLocationSearch" style="margin-bottom:10px;">🔍 Zoek locatie op de kaart</button>
+    <div class="field" id="locationSearchArea" style="display:none;">
+      <div class="row" style="gap:8px;">
+        <input type="text" id="locationSearchInput" placeholder="Bv. Brechin, Schotland">
+        <button class="btn btn-secondary" id="btnDoLocationSearch" style="width:auto; padding:11px 16px;">Zoek</button>
+      </div>
+      <div id="locationSearchResults" style="margin-top:10px;"></div>
+    </div>
+    <button class="btn btn-secondary" id="btnOverlayMap" style="margin-bottom:10px;">🖼️ Kaart overleggen om na te tekenen</button>
+    <input type="file" id="fileOverlayImage" class="file-hidden" accept="image/*">
+    <div class="hint" style="margin-bottom:14px;">
+      Upload een foto of schermafbeelding van je papieren kaart. Voor een PDF: maak eerst een schermafbeelding van de kaartpagina.
+    </div>
+    <div class="divider"></div>
     <button class="btn btn-secondary" id="btnToggleOfficial" style="margin-bottom:10px;">🗺️ Bekijk officiële jachtterreinen (opent Geopunt)</button>
     <button class="btn btn-secondary" id="btnImportOfficial" style="margin-bottom:10px;">📍 Importeer mijn jachtterrein (tik op kaart)</button>
     <div class="hint" style="margin-bottom:14px;">
@@ -418,7 +478,9 @@
       Tip: exporteer je gebied in Google My Maps via <em>⋮ → Exporteren naar KML/KMZ</em> en importeer dat bestand hier — zowel .kml als het standaard, ingepakte .kmz-bestand werken.
     </div>
     <div class="divider"></div>
+    <div id="zonesListEl" style="margin-bottom:14px;"></div>
     <button class="btn btn-outline" id="btnUndoZone" style="margin-bottom:16px;">↩️ Laatst toegevoegde zone verwijderen</button>
+    <button class="btn btn-secondary" id="btnExportKML" style="margin-bottom:16px;">⬇️ Exporteer grens naar KML</button>
     <div class="divider"></div>
     <div class="hint" style="margin-bottom:8px;">Onderstaande knop verwijdert je volledige jachtgebied (alle zones ineens) — niet te herstellen.</div>
     <button class="btn btn-danger" id="btnClearBoundary">🗑️ Volledige grens verwijderen</button>
@@ -428,7 +490,12 @@
   <div class="sheet" id="sheetWild">
     <div class="sheet-handle"></div>
     <h2>Wild registreren</h2>
-    <div class="subtitle">Positie wordt automatisch opgehaald.</div>
+    <div class="subtitle">Positie wordt automatisch opgehaald, of kies zelf een plek voor historische invoer.</div>
+
+    <div class="toggle-row">
+      <div class="chip active" id="wildModeHere">Huidige locatie</div>
+      <div class="chip" id="wildModeMap">Kies plek op kaart</div>
+    </div>
 
     <div class="gps-box">
       <div class="txt">
@@ -436,6 +503,11 @@
         <span id="gpsAccuracy"></span>
       </div>
       <span class="badge badge-unk" id="gpsBadge">…</span>
+    </div>
+
+    <div class="field">
+      <label>Datum</label>
+      <input type="date" id="wildDate">
     </div>
 
     <div class="field">
@@ -492,6 +564,10 @@
     <div class="field">
       <label>Type markering</label>
       <div class="chip-grid" id="markerTypeGrid"></div>
+      <div class="row" style="gap:8px;">
+        <input type="text" id="newMarkerTypeInput" placeholder="Ander type (bv. Frigocel)" style="flex:1;">
+        <button class="btn btn-secondary" id="btnAddMarkerType" style="width:auto; padding:11px 16px;">+</button>
+      </div>
     </div>
 
     <div class="field">
@@ -704,6 +780,7 @@
   let markerPendingCoords = null;
   let drawingActive = false;
   let drawPoints = [];
+  let draftLine = null;
   let drawLayer = null;
   let userMarker = null;
   let shownTrackLayer = null;
@@ -730,13 +807,18 @@
     maxZoom: 19,
     attribution: 'Tiles &copy; Esri'
   });
+  let satTileErrorShown = false;
+  satLayer.on('tileerror', () => {
+    if (!satTileErrorShown) { satTileErrorShown = true; toast('Kon satellietbeelden niet laden (netwerk of dienst niet bereikbaar)'); }
+  });
+  satLayer.on('tileload', () => { satTileErrorShown = false; });
 
   L.control.zoom({ position:'bottomleft' }).addTo(map);
 
   let satActive = false;
   document.getElementById('btnLayer').addEventListener('click', () => {
-    if (satActive) { map.removeLayer(satLayer); map.addLayer(osmLayer); }
-    else { map.removeLayer(osmLayer); map.addLayer(satLayer); }
+    if (satActive) { map.removeLayer(satLayer); map.addLayer(osmLayer); toast('Straatkaart'); }
+    else { map.removeLayer(osmLayer); map.addLayer(satLayer); toast('Satellietbeelden laden…'); }
     satActive = !satActive;
   });
 
@@ -748,6 +830,52 @@
     el.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove('show'), ms || 2400);
+  }
+
+  function appAlert(message) {
+    return new Promise((resolve) => {
+      document.getElementById('confirmModalMessage').textContent = message;
+      const overlay = document.getElementById('confirmModalOverlay');
+      const okBtn = document.getElementById('confirmModalOk');
+      const cancelBtn = document.getElementById('confirmModalCancel');
+      cancelBtn.style.display = 'none';
+      okBtn.textContent = 'OK';
+      okBtn.style.background = 'var(--forest-800)';
+      overlay.style.display = 'flex';
+      function cleanup() {
+        overlay.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.style.display = '';
+        okBtn.textContent = 'Bevestigen';
+        okBtn.style.background = 'var(--danger)';
+        resolve();
+      }
+      function onOk() { cleanup(); }
+      okBtn.addEventListener('click', onOk);
+    });
+  }
+
+  function appConfirm(message) {
+    return new Promise((resolve) => {
+      document.getElementById('confirmModalMessage').textContent = message;
+      const overlay = document.getElementById('confirmModalOverlay');
+      const okBtn = document.getElementById('confirmModalOk');
+      const cancelBtn = document.getElementById('confirmModalCancel');
+      overlay.style.display = 'flex';
+      function cleanup(result) {
+        overlay.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        overlay.removeEventListener('click', onOverlayClick);
+        resolve(result);
+      }
+      function onOk() { cleanup(true); }
+      function onCancel() { cleanup(false); }
+      function onOverlayClick(ev) { if (ev.target === overlay) cleanup(false); }
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      overlay.addEventListener('click', onOverlayClick);
+    });
   }
 
   /* ---------- Sheets ---------- */
@@ -813,6 +941,7 @@
     document.getElementById('gebiedNameDisplay').textContent = g ? (g.name + (g.locked ? ' 🔒' : '')) : 'Geen jachtgebied';
     if (!boundaryLatLngs || boundaryLatLngs.length === 0) {
       document.getElementById('zoneLabel').textContent = 'Geen grens ingesteld';
+      renderZonesList();
       return;
     }
     const polygons = [];
@@ -821,7 +950,7 @@
         const validRing = Array.isArray(ring) && ring.length >= 3 &&
           ring.every(pt => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
         if (!validRing) { console.warn('Ongeldige zone overgeslagen bij tekenen, index', idx, ring); return; }
-        polygons.push(L.polygon(ring, { color:'#4a7c3f', weight:3, fillColor:'#4a7c3f', fillOpacity:0.12 }));
+        polygons.push(L.polygon(ring, { color:'#e11d1d', weight:3, fillColor:'#e11d1d', fillOpacity:0.1 }));
       } catch (e) { console.warn('Kon zone niet tekenen, index', idx, e); }
     });
     boundaryLayer = L.layerGroup(polygons).addTo(map);
@@ -831,6 +960,7 @@
       const allPts = boundaryLatLngs.flat().filter(pt => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
       if (allPts.length) map.fitBounds(L.latLngBounds(allPts), { padding:[30,30] });
     } catch(e) {}
+    renderZonesList();
   }
   function getActiveGebied() { return jachtgebieden.find(g => g.id === activeGebiedId) || null; }
   function isGebiedLocked() { const g = getActiveGebied(); return !!(g && g.locked); }
@@ -860,7 +990,6 @@
     ['btnToggleOfficial','btnImportOfficial','btnStartDraw','btnImportBoundary','btnUndoZone','btnClearBoundary'].forEach(id => {
       const el = document.getElementById(id);
       if (id === 'btnToggleOfficial') return; // viewing Geopunt is always allowed
-      el.disabled = locked;
       el.style.opacity = locked ? '0.5' : '1';
     });
   }
@@ -941,39 +1070,111 @@
 
   /* ---------- Manual drawing ---------- */
   const drawBanner = document.getElementById('drawBanner');
+  let drawHistory = [];
+  let editingZoneIndex = null;
+  function pushDrawHistory() { drawHistory.push(drawPoints.map(p => [p[0], p[1]])); }
+  function undoDraw() {
+    if (drawHistory.length === 0) { toast('Niets meer om ongedaan te maken'); return; }
+    drawPoints = drawHistory.pop();
+    redrawDraft();
+  }
   function startDrawing() {
     if (blockedByLock()) return;
     closeAllSheets();
+    editingZoneIndex = null;
     drawingActive = true;
     drawPoints = [];
+    drawHistory = [];
+    draftLine = null;
     if (drawLayer) map.removeLayer(drawLayer);
     drawLayer = L.layerGroup().addTo(map);
     drawBanner.classList.add('show');
-    document.getElementById('drawBannerTxt').textContent = 'Tik op de kaart om punten te plaatsen (min. 3)';
+    document.getElementById('drawBannerTxt').textContent = 'Tik om punten te plaatsen — versleep ze nadien om bij te stellen';
     map.on('click', onDrawClick);
   }
+  function editZone(idx) {
+    if (blockedByLock()) return;
+    closeAllSheets();
+    editingZoneIndex = idx;
+    drawingActive = true;
+    drawPoints = boundaryLatLngs[idx].map(p => [p[0], p[1]]);
+    drawHistory = [];
+    draftLine = null;
+    if (drawLayer) map.removeLayer(drawLayer);
+    drawLayer = L.layerGroup().addTo(map);
+    drawBanner.classList.add('show');
+    document.getElementById('drawBannerTxt').textContent = 'Versleep punten of tik tussenpuntjes om deze zone aan te passen';
+    map.on('click', onDrawClick);
+    redrawDraft();
+    const allPts = drawPoints;
+    try { map.fitBounds(L.latLngBounds(allPts), { padding:[40,40] }); } catch(e) {}
+  }
   function onDrawClick(e) {
+    pushDrawHistory();
     drawPoints.push([e.latlng.lat, e.latlng.lng]);
     redrawDraft();
   }
   function redrawDraft() {
     drawLayer.clearLayers();
-    drawPoints.forEach(p => L.circleMarker(p, { radius:5, color:'#d94f04', fillColor:'#d94f04', fillOpacity:1 }).addTo(drawLayer));
+    const dragIcon = L.divIcon({
+      html: '<div style="width:16px;height:16px;border-radius:50%;background:#d94f04;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);"></div>',
+      className:'', iconSize:[16,16], iconAnchor:[8,8]
+    });
+    const midIcon = L.divIcon({
+      html: '<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #d94f04;opacity:.85;"></div>',
+      className:'', iconSize:[12,12], iconAnchor:[6,6]
+    });
+    drawPoints.forEach((p, idx) => {
+      const marker = L.marker(p, { icon: dragIcon, draggable: true }).addTo(drawLayer);
+      marker.on('dragstart', pushDrawHistory);
+      marker.on('drag', (ev) => {
+        drawPoints[idx] = [ev.target.getLatLng().lat, ev.target.getLatLng().lng];
+        redrawDraftLine();
+      });
+      marker.on('dragend', redrawDraft);
+    });
+    const n = drawPoints.length;
+    const edges = [];
+    for (let i = 0; i < n - 1; i++) edges.push([i, i + 1]);
+    if (n >= 3) edges.push([n - 1, 0]);
+    edges.forEach(([i, j]) => {
+      const midLat = (drawPoints[i][0] + drawPoints[j][0]) / 2;
+      const midLng = (drawPoints[i][1] + drawPoints[j][1]) / 2;
+      const insertIdx = i + 1;
+      const midMarker = L.marker([midLat, midLng], { icon: midIcon }).addTo(drawLayer);
+      midMarker.on('click', (ev) => {
+        L.DomEvent.stop(ev);
+        pushDrawHistory();
+        drawPoints.splice(insertIdx, 0, [midLat, midLng]);
+        redrawDraft();
+      });
+    });
+    redrawDraftLine();
+  }
+  function redrawDraftLine() {
+    if (draftLine) drawLayer.removeLayer(draftLine);
     if (drawPoints.length > 1) {
-      L.polyline(drawPoints.concat(drawPoints.length > 2 ? [drawPoints[0]] : []), { color:'#d94f04', weight:3, dashArray:'6,6' }).addTo(drawLayer);
+      draftLine = L.polyline(drawPoints.concat(drawPoints.length > 2 ? [drawPoints[0]] : []), { color:'#d94f04', weight:3, dashArray:'6,6' }).addTo(drawLayer);
     }
   }
-  document.getElementById('drawUndo').addEventListener('click', () => { drawPoints.pop(); redrawDraft(); });
+  document.getElementById('drawUndo').addEventListener('click', undoDraw);
   document.getElementById('drawCancel').addEventListener('click', cancelDrawing);
   document.getElementById('drawFinish').addEventListener('click', async () => {
     if (drawPoints.length < 3) { toast('Minimum 3 punten nodig'); return; }
-    boundaryLatLngs = [drawPoints.slice()];
+    if (editingZoneIndex !== null) {
+      boundaryLatLngs[editingZoneIndex] = drawPoints.slice();
+      toast('Zone bijgewerkt');
+    } else {
+      boundaryLatLngs = (boundaryLatLngs || []).concat([drawPoints.slice()]);
+      toast('Zone toegevoegd — jachtgebied bestaat nu uit ' + boundaryLatLngs.length + ' zone(s)');
+    }
+    editingZoneIndex = null;
     await saveBoundary();
     renderBoundary();
+    renderZonesList();
     stopDrawingUi();
-    toast('Grens opgeslagen');
   });
-  function cancelDrawing() { stopDrawingUi(); }
+  function cancelDrawing() { editingZoneIndex = null; stopDrawingUi(); }
   function stopDrawingUi() {
     drawingActive = false;
     drawBanner.classList.remove('show');
@@ -1052,7 +1253,7 @@
               rings = parseKML(await resp.text());
             } catch (linkErr) {
               window.open(href, '_blank');
-              alert('Kon de live kaartdata niet automatisch ophalen (browserbeveiliging).\n\nEr opende een nieuw tabblad met de echte tekening. Sla die pagina op als .kml bestand (Ctrl+S) en importeer dat bestand hier opnieuw.\n\nTip: exporteer voortaan in Google My Maps rechtstreeks de specifieke LAAG (klik ⋮ naast de laagnaam zelf, niet naast de titel van de hele kaart) — dat geeft meteen de echte tekening in plaats van een verwijzing.');
+              await appAlert('Kon de live kaartdata niet automatisch ophalen (browserbeveiliging).\n\nEr opende een nieuw tabblad met de echte tekening. Sla die pagina op als .kml bestand (Ctrl+S) en importeer dat bestand hier opnieuw.\n\nTip: exporteer voortaan in Google My Maps rechtstreeks de specifieke LAAG (klik ⋮ naast de laagnaam zelf, niet naast de titel van de hele kaart) — dat geeft meteen de echte tekening in plaats van een verwijzing.');
               e.target.value = '';
               return;
             }
@@ -1071,7 +1272,7 @@
               rings = parseKML(await resp.text());
             } catch (linkErr) {
               window.open(href, '_blank');
-              alert('Kon de live kaartdata niet automatisch ophalen (browserbeveiliging).\n\nEr opende een nieuw tabblad met de echte tekening. Sla die pagina op als .kml bestand (Ctrl+S) en importeer dat bestand hier opnieuw.\n\nTip: exporteer voortaan in Google My Maps rechtstreeks de specifieke LAAG (klik ⋮ naast de laagnaam zelf, niet naast de titel van de hele kaart) — dat geeft meteen de echte tekening in plaats van een verwijzing.');
+              await appAlert('Kon de live kaartdata niet automatisch ophalen (browserbeveiliging).\n\nEr opende een nieuw tabblad met de echte tekening. Sla die pagina op als .kml bestand (Ctrl+S) en importeer dat bestand hier opnieuw.\n\nTip: exporteer voortaan in Google My Maps rechtstreeks de specifieke LAAG (klik ⋮ naast de laagnaam zelf, niet naast de titel van de hele kaart) — dat geeft meteen de echte tekening in plaats van een verwijzing.');
               e.target.value = '';
               return;
             }
@@ -1082,16 +1283,16 @@
       }
     } catch (err) { toast('Kon bestand niet lezen: ' + err.message); return; }
     if (rings.length === 0) { toast('Geen (multi)polygoon gevonden in bestand'); return; }
-    boundaryLatLngs = rings;
+    boundaryLatLngs = (boundaryLatLngs || []).concat(rings);
     await saveBoundary();
     renderBoundary();
     closeAllSheets();
-    toast(rings.length + ' zone(s) geïmporteerd');
+    toast(rings.length + ' zone(s) toegevoegd — jachtgebied bestaat nu uit ' + boundaryLatLngs.length + ' zone(s)');
     e.target.value = '';
   });
   document.getElementById('btnClearBoundary').addEventListener('click', async () => {
     if (blockedByLock()) return;
-    if (!confirm('Dit verwijdert je VOLLEDIGE jachtgebied (alle zones), niet enkel de laatste. Doorgaan?')) return;
+    if (!(await appConfirm('Dit verwijdert je VOLLEDIGE jachtgebied (alle zones), niet enkel de laatste. Doorgaan?'))) return;
     boundaryLatLngs = null;
     await saveBoundary();
     renderBoundary();
@@ -1099,6 +1300,128 @@
     toast('Grens verwijderd');
   });
   document.getElementById('btnStartDraw').addEventListener('click', startDrawing);
+
+  /* ---------- Locatie zoeken (OpenStreetMap Nominatim, gratis) ---------- */
+  document.getElementById('btnLocationSearch').addEventListener('click', () => {
+    const area = document.getElementById('locationSearchArea');
+    area.style.display = area.style.display === 'none' ? '' : 'none';
+    if (area.style.display !== 'none') document.getElementById('locationSearchInput').focus();
+  });
+  async function doLocationSearch() {
+    const q = document.getElementById('locationSearchInput').value.trim();
+    if (!q) return;
+    const resultsEl = document.getElementById('locationSearchResults');
+    resultsEl.innerHTML = '<div class="hint">Zoeken…</div>';
+    try {
+      const resp = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(q));
+      if (!resp.ok) throw new Error('Zoekdienst niet bereikbaar');
+      const results = await resp.json();
+      if (results.length === 0) { resultsEl.innerHTML = '<div class="hint">Niets gevonden voor "' + escapeHtml(q) + '"</div>'; return; }
+      resultsEl.innerHTML = '';
+      results.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'search-result';
+        div.textContent = r.display_name;
+        div.addEventListener('click', () => {
+          map.setView([parseFloat(r.lat), parseFloat(r.lon)], 14);
+          document.getElementById('locationSearchArea').style.display = 'none';
+          closeAllSheets();
+          toast('Kaart verplaatst naar ' + r.display_name.split(',')[0]);
+        });
+        resultsEl.appendChild(div);
+      });
+    } catch (err) {
+      resultsEl.innerHTML = '<div class="hint">Kon niet zoeken: ' + err.message + '</div>';
+    }
+  }
+  document.getElementById('btnDoLocationSearch').addEventListener('click', doLocationSearch);
+  document.getElementById('locationSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLocationSearch(); });
+
+  /* ---------- Kaart overleggen om na te tekenen ---------- */
+  let overlayImageLayer = null, overlayOutlineRect = null, overlayNwMarker = null, overlaySeMarker = null;
+  document.getElementById('btnOverlayMap').addEventListener('click', () => {
+    if (blockedByLock()) return;
+    document.getElementById('fileOverlayImage').click();
+  });
+  document.getElementById('fileOverlayImage').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => toast('⚠️ Kon het bestand niet lezen');
+    reader.onload = () => {
+      const url = reader.result; // data: URL — self-contained, no blob lifecycle issues
+      closeAllSheets();
+      const b = map.getBounds();
+      const bounds = b.pad ? b.pad(-0.15) : b; // start slightly smaller than the visible view
+      if (overlayImageLayer) map.removeLayer(overlayImageLayer);
+      if (overlayOutlineRect) map.removeLayer(overlayOutlineRect);
+      overlayImageLayer = L.imageOverlay(url, bounds, { opacity: 0.7 }).addTo(map);
+      overlayImageLayer.on('error', () => toast('⚠️ Kon de afbeelding niet laden — probeer een JPG of PNG'));
+      overlayImageLayer.on('load', () => toast('Foto geladen — versleep de hoekpunten'));
+      overlayOutlineRect = L.rectangle(bounds, { color:'#d94f04', weight:2, dashArray:'6,6', fill:false }).addTo(map);
+      addOverlayCornerHandles(bounds);
+      document.getElementById('overlayOpacity').value = 70;
+      document.getElementById('overlayControls').style.display = '';
+      toast('Versleep de hoekpunten om je foto uit te lijnen');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+  function addOverlayCornerHandles(bounds) {
+    removeOverlayCornerHandles();
+    const handleIcon = L.divIcon({
+      html: '<div style="width:20px;height:20px;border-radius:50%;background:#d94f04;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);"></div>',
+      className:'', iconSize:[20,20], iconAnchor:[10,10]
+    });
+    overlayNwMarker = L.marker(bounds.getNorthWest(), { icon: handleIcon, draggable: true }).addTo(map);
+    overlaySeMarker = L.marker(bounds.getSouthEast(), { icon: handleIcon, draggable: true }).addTo(map);
+    function updateOverlayBounds() {
+      const newBounds = L.latLngBounds(overlayNwMarker.getLatLng(), overlaySeMarker.getLatLng());
+      overlayImageLayer.setBounds(newBounds);
+      if (overlayOutlineRect) overlayOutlineRect.setBounds(newBounds);
+    }
+    overlayNwMarker.on('drag', updateOverlayBounds);
+    overlaySeMarker.on('drag', updateOverlayBounds);
+  }
+  function removeOverlayCornerHandles() {
+    if (overlayNwMarker) { map.removeLayer(overlayNwMarker); overlayNwMarker = null; }
+    if (overlaySeMarker) { map.removeLayer(overlaySeMarker); overlaySeMarker = null; }
+  }
+  document.getElementById('overlayOpacity').addEventListener('input', (e) => {
+    if (overlayImageLayer) overlayImageLayer.setOpacity(e.target.value / 100);
+  });
+  document.getElementById('btnRemoveOverlay').addEventListener('click', () => {
+    if (overlayImageLayer) { map.removeLayer(overlayImageLayer); overlayImageLayer = null; }
+    if (overlayOutlineRect) { map.removeLayer(overlayOutlineRect); overlayOutlineRect = null; }
+    removeOverlayCornerHandles();
+    document.getElementById('overlayControls').style.display = 'none';
+    toast('Overlay verwijderd');
+  });
+  document.getElementById('btnDoneOverlay').addEventListener('click', () => {
+    removeOverlayCornerHandles();
+    document.getElementById('overlayControls').style.display = 'none';
+    startDrawing();
+    toast('Teken nu de omtrek na — de foto blijft zichtbaar als hulplijn');
+  });
+  function renderZonesList() {
+    const el = document.getElementById('zonesListEl');
+    if (!el) return;
+    if (!boundaryLatLngs || boundaryLatLngs.length === 0) { el.innerHTML = ''; return; }
+    const locked = isGebiedLocked();
+    el.innerHTML = '<div class="hint" style="margin-bottom:8px;">Zones in dit jachtgebied:</div>' +
+      boundaryLatLngs.map((ring, idx) =>
+        '<div class="list-card" style="margin-bottom:6px;">' +
+          '<div class="thumb">📐</div>' +
+          '<div class="info"><div class="title">Zone ' + (idx + 1) + '</div><div class="meta">' + ring.length + ' punten</div></div>' +
+          '<div class="list-actions">' +
+            '<button data-act="edit" data-idx="' + idx + '" title="Bewerk"' + (locked ? ' disabled style="opacity:.4;"' : '') + '>✏️</button>' +
+          '</div>' +
+        '</div>'
+      ).join('');
+    el.querySelectorAll('[data-act=edit]').forEach(btn => {
+      btn.addEventListener('click', () => editZone(parseInt(btn.getAttribute('data-idx'), 10)));
+    });
+  }
   document.getElementById('btnUndoZone').addEventListener('click', async () => {
     if (blockedByLock()) return;
     if (!boundaryLatLngs || boundaryLatLngs.length === 0) { toast('Geen zones om te verwijderen'); return; }
@@ -1108,6 +1431,30 @@
     renderBoundary();
     closeAllSheets();
     toast('Laatste zone verwijderd');
+  });
+
+  document.getElementById('btnExportKML').addEventListener('click', () => {
+    if (!boundaryLatLngs || boundaryLatLngs.length === 0) { toast('Geen grens om te exporteren'); return; }
+    const g = getActiveGebied();
+    const gebiedName = g ? g.name : 'Jachtgebied';
+    const placemarks = boundaryLatLngs.map((ring, i) => {
+      const closed = ring.concat([ring[0]]); // KML requires the ring to close
+      const coordsStr = closed.map(pt => pt[1] + ',' + pt[0] + ',0').join(' ');
+      return '  <Placemark>\n    <name>' + escapeHtml(gebiedName) + ' - zone ' + (i + 1) + '</name>\n' +
+        '    <Polygon><outerBoundaryIs><LinearRing><coordinates>' + coordsStr + '</coordinates></LinearRing></outerBoundaryIs></Polygon>\n' +
+        '  </Placemark>';
+    }).join('\n');
+    const kml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>\n' +
+      '  <name>' + escapeHtml(gebiedName) + '</name>\n' + placemarks + '\n' +
+      '</Document></kml>';
+    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = gebiedName.replace(/[^a-z0-9]/gi, '_') + '.kml';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('KML gedownload — bruikbaar in Google My Maps, Google Earth, QGIS, ...');
   });
 
   /* ---------- Officiële jachtterreinen (Digitaal Vlaanderen, WMS/WFS) ---------- */
@@ -1139,7 +1486,7 @@
       data = await resp.json();
     } catch (err) {
       window.open(url, '_blank');
-      alert('Automatisch ophalen lukt niet vanuit de app (browserbeveiliging).\n\nEr opende net een nieuw tabblad met de ruwe data. Sla die pagina op als bestand (Ctrl+S / Cmd+S, kies "jachtterrein.geojson"), en importeer dat bestand hier via "📂 Importeer KML / GeoJSON".');
+      await appAlert('Automatisch ophalen lukt niet vanuit de app (browserbeveiliging).\n\nEr opende net een nieuw tabblad met de ruwe data. Sla die pagina op als bestand (Ctrl+S / Cmd+S, kies "jachtterrein.geojson"), en importeer dat bestand hier via "📂 Importeer KML / GeoJSON".');
       return;
     }
     try {
@@ -1156,7 +1503,7 @@
       );
       if (alreadyHave) { toast('Deze zone zit al in je jachtgebied'); return; }
       const zoneCountBefore = boundaryLatLngs ? boundaryLatLngs.length : 0;
-      if (!confirm('Deze zone toevoegen aan jouw jachtgebied? (je hebt er nu ' + zoneCountBefore + ')')) return;
+      if (!(await appConfirm('Deze zone toevoegen aan jouw jachtgebied? (je hebt er nu ' + zoneCountBefore + ')'))) return;
       boundaryLatLngs = (boundaryLatLngs || []).concat(matchRings);
       await saveBoundary();
       renderBoundary();
@@ -1334,7 +1681,7 @@
         map.fitBounds(shownTrackLayer.getBounds(), { padding:[30,30] });
       });
       card.querySelector('[data-act=del]').addEventListener('click', async () => {
-        if (!confirm('Dit spoor verwijderen?')) return;
+        if (!(await appConfirm('Dit spoor verwijderen?'))) return;
         await idbDelete('tracks', tr.id);
         tracks = tracks.filter(t => t.id !== tr.id);
         renderTracksList();
@@ -1379,18 +1726,38 @@
     else { badge.className = 'badge badge-out'; badge.textContent = 'buiten gebied'; }
   }
 
+  let wildMode = 'here'; // 'here' | 'map'
   async function openWildSheet() {
     pendingCoords = null; pendingPhotoBlob = null; selectedSpecies = null;
     document.getElementById('speciesOther').value = '';
     document.getElementById('wildNote').value = '';
+    document.getElementById('wildDate').value = new Date().toISOString().slice(0, 10);
     [...speciesGrid.children].forEach(c => c.classList.remove('active'));
     resetPhotoUi();
-    updateGpsUi(null, 'gpsCoords', 'gpsAccuracy', 'gpsBadge');
+    setWildMode('here');
     openSheet('addwild');
     try { pendingCoords = await getPosition(); }
     catch (e) { toast('Kon GPS-positie niet ophalen — probeer opnieuw of ga naar buiten'); }
     updateGpsUi(pendingCoords, 'gpsCoords', 'gpsAccuracy', 'gpsBadge');
   }
+  function setWildMode(mode) {
+    wildMode = mode;
+    document.getElementById('wildModeHere').classList.toggle('active', mode === 'here');
+    document.getElementById('wildModeMap').classList.toggle('active', mode === 'map');
+    if (mode === 'map') {
+      closeAllSheets();
+      toast('Tik op de kaart om de plek te kiezen');
+      map.once('click', (e) => {
+        pendingCoords = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: 0 };
+        updateGpsUi(pendingCoords, 'gpsCoords', 'gpsAccuracy', 'gpsBadge');
+        openSheet('addwild');
+      });
+    } else {
+      updateGpsUi(pendingCoords, 'gpsCoords', 'gpsAccuracy', 'gpsBadge');
+    }
+  }
+  document.getElementById('wildModeHere').addEventListener('click', () => setWildMode('here'));
+  document.getElementById('wildModeMap').addEventListener('click', () => setWildMode('map'));
   document.getElementById('btnAddWild').addEventListener('click', openWildSheet);
   document.getElementById('btnCancelWild').addEventListener('click', closeAllSheets);
 
@@ -1411,13 +1778,15 @@
   });
 
   document.getElementById('btnSaveWild').addEventListener('click', async () => {
-    if (!pendingCoords) { toast('Wacht op GPS-positie of probeer opnieuw'); return; }
+    if (!pendingCoords) { toast('Wacht op GPS-positie, of kies eerst een plek op de kaart'); return; }
     const species = (document.getElementById('speciesOther').value || selectedSpecies || '').trim() || 'Onbekend';
     const note = document.getElementById('wildNote').value.trim();
+    const dateVal = document.getElementById('wildDate').value;
+    const timestamp = dateVal ? new Date(dateVal + 'T12:00:00').getTime() : Date.now();
     const inside = isInsideBoundary(pendingCoords.lat, pendingCoords.lng);
     const entry = {
       species, note, lat: pendingCoords.lat, lng: pendingCoords.lng, accuracy: pendingCoords.accuracy,
-      insideBoundary: inside, timestamp: Date.now(), photo: pendingPhotoBlob || null
+      insideBoundary: inside, timestamp, photo: pendingPhotoBlob || null
     };
     const id = await idbAdd('entries', entry);
     entry.id = id;
@@ -1689,7 +2058,7 @@
           '<div class="list-actions"><button data-act="edit" title="Bewerk">✏️</button><button data-act="del" title="Verwijder">🗑️</button></div>';
         card.querySelector('[data-act=edit]').addEventListener('click', () => openTableauAddSheet(t));
         card.querySelector('[data-act=del]').addEventListener('click', async () => {
-          if (!confirm('Dit tableau verwijderen?')) return;
+          if (!(await appConfirm('Dit tableau verwijderen?'))) return;
           await idbDelete('tableaus', t.id);
           tableaus = tableaus.filter(x => x.id !== t.id);
           renderTableau();
@@ -1729,7 +2098,7 @@
         if (entryMarkers[entry.id]) entryMarkers[entry.id].openPopup();
       });
       card.querySelector('[data-act=del]').addEventListener('click', async () => {
-        if (!confirm('Deze registratie verwijderen?')) return;
+        if (!(await appConfirm('Deze registratie verwijderen?'))) return;
         await idbDelete('entries', entry.id);
         entries = entries.filter(en => en.id !== entry.id);
         if (entryMarkers[entry.id]) { map.removeLayer(entryMarkers[entry.id]); delete entryMarkers[entry.id]; }
@@ -1740,17 +2109,43 @@
   }
 
   /* ---------- Markers (hoogzit, voederplaats, ...) ---------- */
+  const GENERIC_MARKER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.2"/></svg>';
+  let customMarkerTypes = [];
+  function allMarkerTypes() { return MARKER_TYPES.concat(customMarkerTypes); }
+  async function loadCustomMarkerTypes() {
+    const rec = await idbGet('settings', 'customMarkerTypes');
+    if (rec && rec.value) customMarkerTypes = rec.value;
+  }
+  async function saveCustomMarkerTypes() {
+    await idbPut('settings', { key: 'customMarkerTypes', value: customMarkerTypes });
+  }
   const markerTypeGrid = document.getElementById('markerTypeGrid');
-  MARKER_TYPES.forEach(mt => {
-    const chip = document.createElement('div');
-    chip.className = 'chip';
-    chip.innerHTML = '<span style="display:inline-flex;width:15px;height:15px;vertical-align:-3px;margin-right:4px;">' + mt.svg + '</span>' + mt.label;
-    chip.addEventListener('click', () => {
-      selectedMarkerType = mt.key;
-      [...markerTypeGrid.children].forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
+  function buildMarkerTypeGrid() {
+    markerTypeGrid.innerHTML = '';
+    allMarkerTypes().forEach(mt => {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (selectedMarkerType === mt.key ? ' active' : '');
+      chip.innerHTML = '<span style="display:inline-flex;width:15px;height:15px;vertical-align:-3px;margin-right:4px;">' + mt.svg + '</span>' + mt.label;
+      chip.addEventListener('click', () => {
+        selectedMarkerType = mt.key;
+        [...markerTypeGrid.children].forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+      });
+      markerTypeGrid.appendChild(chip);
     });
-    markerTypeGrid.appendChild(chip);
+  }
+  buildMarkerTypeGrid();
+  document.getElementById('btnAddMarkerType').addEventListener('click', async () => {
+    const input = document.getElementById('newMarkerTypeInput');
+    const name = input.value.trim();
+    if (!name) return;
+    const key = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_' + Date.now();
+    customMarkerTypes.push({ key, label: name, svg: GENERIC_MARKER_SVG });
+    await saveCustomMarkerTypes();
+    input.value = '';
+    selectedMarkerType = key;
+    buildMarkerTypeGrid();
+    toast('Type "' + name + '" toegevoegd');
   });
 
   const markerModeHere = document.getElementById('markerModeHere');
@@ -1804,7 +2199,7 @@
     toast('Markering bewaard');
   });
 
-  function markerTypeInfo(key) { return MARKER_TYPES.find(m => m.key === key) || MARKER_TYPES[MARKER_TYPES.length-1]; }
+  function markerTypeInfo(key) { return allMarkerTypes().find(m => m.key === key) || MARKER_TYPES[MARKER_TYPES.length-1]; }
 
   function addMarkerMarker(mrk) {
     const info = markerTypeInfo(mrk.type);
@@ -1850,7 +2245,7 @@
         if (markerMarkers[mrk.id]) markerMarkers[mrk.id].openPopup();
       });
       card.querySelector('[data-act=del]').addEventListener('click', async () => {
-        if (!confirm('Deze markering verwijderen?')) return;
+        if (!(await appConfirm('Deze markering verwijderen?'))) return;
         await idbDelete('markers', mrk.id);
         markers = markers.filter(m => m.id !== mrk.id);
         if (markerMarkers[mrk.id]) { map.removeLayer(markerMarkers[mrk.id]); delete markerMarkers[mrk.id]; }
@@ -2064,6 +2459,8 @@
     await loadTracks();
     await loadTableaus();
     await loadTableauSpeciesConfig();
+    await loadCustomMarkerTypes();
+    buildMarkerTypeGrid();
     try {
       const pos = await getPosition();
       map.setView([pos.lat, pos.lng], 14);
