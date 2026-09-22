@@ -42,12 +42,17 @@
     padding:calc(10px + var(--safe-top)) 16px 10px;
     display:flex; align-items:center; justify-content:space-between;
     z-index:500; box-shadow:0 2px 8px rgba(0,0,0,.35);
+    position:relative;
   }
-  .topbar .brand{ display:flex; flex-direction:column; line-height:1.15; min-width:0; }
+  .topbar .brand{
+    display:flex; flex-direction:column; align-items:center; line-height:1.2; min-width:0;
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    max-width:calc(100% - 90px); text-align:center;
+  }
   .topbar .brand .app-label{ font-size:10px; font-weight:600; color:var(--parchment-dim); opacity:.7; text-transform:uppercase; letter-spacing:.04em; }
-  .topbar .brand strong{ font-size:20px; font-weight:800; color:#e8c37a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .topbar .brand span{ font-size:11px; color:var(--parchment-dim); opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .topbar-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .topbar .brand strong{ font-size:26px; font-weight:800; color:#e8c37a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .topbar .brand span{ font-size:11px; color:var(--parchment-dim); opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .topbar-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; margin-left:auto; }
   .icon-btn{
     background:var(--forest-800); border:1px solid var(--forest-600); color:var(--parchment);
     width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center;
@@ -180,7 +185,7 @@
 
   .field{ margin-bottom:14px; }
   .field label{ display:block; font-size:12px; font-weight:700; color:var(--ink-soft); margin-bottom:6px; }
-  select, textarea, input[type=text]{
+  select, textarea, input[type=text], input[type=email], input[type=password]{
     width:100%; border:1.5px solid var(--paper-line); background:#fff; border-radius:10px;
     padding:11px 12px; font-size:15px; color:var(--ink); font-family:inherit;
   }
@@ -350,6 +355,51 @@
 </style>
 </head>
 <body>
+
+<div id="authOverlay" style="position:fixed;inset:0;z-index:5000;background:var(--forest-900);color:var(--parchment);display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;">
+  <div style="width:100%;max-width:380px;">
+    <div style="text-align:center;margin-bottom:22px;">
+      <div style="font-size:34px;">🌲</div>
+      <h1 style="color:#e8c37a;font-size:24px;margin:6px 0 2px;">Jachtlogboek</h1>
+      <div style="color:var(--parchment-dim);font-size:13px;">Gedeeld jachtbeheer in de cloud</div>
+    </div>
+
+    <div id="authStepLogin">
+      <h2 style="margin-bottom:12px;">Inloggen</h2>
+      <div class="field"><label style="color:var(--parchment-dim);">E-mail</label><input type="email" id="loginEmail" autocomplete="username"></div>
+      <div class="field"><label style="color:var(--parchment-dim);">Wachtwoord</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
+      <button class="btn btn-primary" id="btnDoLogin">Inloggen</button>
+      <div style="text-align:center;margin-top:16px;font-size:14px;">Nog geen account? <a href="#" id="linkToRegister" style="color:#e8c37a;">Registreer</a></div>
+    </div>
+
+    <div id="authStepRegister" style="display:none;">
+      <h2 style="margin-bottom:12px;">Account aanmaken</h2>
+      <div class="field"><label style="color:var(--parchment-dim);">Naam</label><input type="text" id="registerName"></div>
+      <div class="field"><label style="color:var(--parchment-dim);">E-mail</label><input type="email" id="registerEmail" autocomplete="username"></div>
+      <div class="field"><label style="color:var(--parchment-dim);">Wachtwoord (min. 6 tekens)</label><input type="password" id="registerPassword" autocomplete="new-password"></div>
+      <button class="btn btn-primary" id="btnDoRegister">Registreren</button>
+      <div style="text-align:center;margin-top:16px;font-size:14px;">Al een account? <a href="#" id="linkToLogin" style="color:#e8c37a;">Inloggen</a></div>
+    </div>
+
+    <div id="authStepGroups" style="display:none;">
+      <h2 style="margin-bottom:4px;">Kies je groep</h2>
+      <div class="hint" style="color:var(--parchment-dim);margin-bottom:12px;">Een groep deelt jachtgebieden met alle leden.</div>
+      <div id="authGroupsList"></div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.15);">
+        <div class="field"><label style="color:var(--parchment-dim);">Nieuwe groep aanmaken</label><input type="text" id="newGroupName" placeholder="Bv. Jachtgroep Dinnet"></div>
+        <button class="btn btn-secondary" id="btnCreateGroup">➕ Groep aanmaken</button>
+      </div>
+      <div style="margin-top:14px;">
+        <div class="field"><label style="color:var(--parchment-dim);">Lid worden via uitnodigingscode</label><input type="text" id="joinGroupCode" placeholder="Bv. a1b2c3d4"></div>
+        <button class="btn btn-secondary" id="btnJoinGroup">🔑 Lid worden</button>
+      </div>
+      <div style="text-align:center;margin-top:18px;"><a href="#" id="linkSignOut" style="color:var(--parchment-dim);font-size:13px;">Uitloggen</a></div>
+    </div>
+
+    <div id="authMsg" style="margin-top:12px;text-align:center;font-size:13px;color:#f2b8b8;min-height:16px;"></div>
+  </div>
+</div>
+
 <div id="app">
 
   <div class="topbar">
@@ -449,6 +499,7 @@
       <button class="menu-item" data-open="boundary"><span class="emoji">📐</span><span class="col">Jachtgebied grens<div class="sub">Tekenen of importeren</div></span></button>
       <button class="menu-item" data-open="tableau"><span class="emoji">📊</span><span class="col">Tableau<div class="sub">Aantallen per soort</div></span></button>
       <button class="menu-item" data-open="data"><span class="emoji">⇅</span><span class="col">Data<div class="sub">Back-up maken of terugzetten</div></span></button>
+      <button class="menu-item" id="btnAccountInfo"><span class="emoji">👤</span><span class="col" id="accountInfoLabel">Groep<div class="sub" id="accountInfoSub">—</div></span></button>
     </div>
   </div>
 
@@ -731,9 +782,129 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function(){
   "use strict";
+
+  /* ---------- Supabase (cloud, gedeeld per groep) ---------- */
+  const SUPABASE_URL = 'https://jvcjvhqkzqghrdicsshx.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_coSlgJrP8vLFlix_vo_-Vw_eyLOprR5';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let currentUser = null;
+  let currentGroupId = null;
+  let currentGroupName = '';
+  let currentGroupRole = null;
+
+  function authMsg(text) { const el = document.getElementById('authMsg'); if (el) el.textContent = text || ''; }
+  function showAuthStep(step) {
+    ['Login','Register','Groups'].forEach(s => {
+      document.getElementById('authStep' + s).style.display = (s === step) ? '' : 'none';
+    });
+    authMsg('');
+  }
+  function escapeHtmlEarly(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  document.getElementById('linkToRegister').addEventListener('click', (e) => { e.preventDefault(); showAuthStep('Register'); });
+  document.getElementById('linkToLogin').addEventListener('click', (e) => { e.preventDefault(); showAuthStep('Login'); });
+  document.getElementById('linkSignOut').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await sb.auth.signOut();
+    currentUser = null; currentGroupId = null; currentGroupName = ''; currentGroupRole = null;
+    document.getElementById('loginEmail').value = ''; document.getElementById('loginPassword').value = '';
+    showAuthStep('Login');
+  });
+
+  document.getElementById('btnDoLogin').addEventListener('click', async () => {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if (!email || !password) { authMsg('Vul e-mail en wachtwoord in'); return; }
+    authMsg('Bezig met inloggen…');
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) { authMsg(error.message); return; }
+    currentUser = data.user;
+    await loadMyGroups();
+  });
+
+  document.getElementById('btnDoRegister').addEventListener('click', async () => {
+    const name = document.getElementById('registerName').value.trim();
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    if (!email || !password) { authMsg('Vul e-mail en wachtwoord in'); return; }
+    if (password.length < 6) { authMsg('Wachtwoord moet minstens 6 tekens zijn'); return; }
+    authMsg('Account aanmaken…');
+    const { data, error } = await sb.auth.signUp({ email, password, options: { data: { display_name: name || email } } });
+    if (error) { authMsg(error.message); return; }
+    if (data.session) {
+      currentUser = data.user;
+      await loadMyGroups();
+    } else {
+      authMsg('Account aangemaakt! Bevestig je e-mailadres via de link die we stuurden, en log dan in.');
+      showAuthStep('Login');
+    }
+  });
+
+  async function loadMyGroups() {
+    authMsg('Groepen laden…');
+    const { data, error } = await sb
+      .from('group_members')
+      .select('role, groups ( id, name, invite_code )')
+      .eq('user_id', currentUser.id);
+    if (error) { authMsg('Kon groepen niet laden: ' + error.message); return; }
+    const listEl = document.getElementById('authGroupsList');
+    if (!data || data.length === 0) {
+      listEl.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Je bent nog geen lid van een groep. Maak er een aan, of vraag een uitnodigingscode aan iemand die er al een heeft.</div>';
+    } else {
+      listEl.innerHTML = data.map(row =>
+        '<div class="list-card" data-id="' + row.groups.id + '" data-name="' + escapeHtmlEarly(row.groups.name) + '" data-role="' + row.role + '" style="cursor:pointer;">' +
+          '<div class="info"><div class="top"><span class="title">' + escapeHtmlEarly(row.groups.name) + '</span></div>' +
+          '<div class="meta">' + (row.role === 'admin' ? 'Admin · uitnodigingscode: ' + row.groups.invite_code : 'Lid') + '</div></div>' +
+        '</div>'
+      ).join('');
+      listEl.querySelectorAll('[data-id]').forEach(el => {
+        el.addEventListener('click', () => enterGroup(el.getAttribute('data-id'), el.getAttribute('data-name'), el.getAttribute('data-role')));
+      });
+    }
+    authMsg('');
+    showAuthStep('Groups');
+  }
+
+  document.getElementById('btnCreateGroup').addEventListener('click', async () => {
+    const name = document.getElementById('newGroupName').value.trim();
+    if (!name) { authMsg('Vul een naam in'); return; }
+    authMsg('Groep aanmaken…');
+    const { data, error } = await sb.rpc('create_group', { gname: name });
+    if (error) { authMsg(error.message); return; }
+    enterGroup(data, name, 'admin');
+  });
+
+  document.getElementById('btnJoinGroup').addEventListener('click', async () => {
+    const code = document.getElementById('joinGroupCode').value.trim();
+    if (!code) { authMsg('Vul een code in'); return; }
+    authMsg('Groep zoeken…');
+    const { data, error } = await sb.rpc('join_group_by_code', { code });
+    if (error) { authMsg(error.message); return; }
+    const { data: g } = await sb.from('groups').select('name').eq('id', data).single();
+    enterGroup(data, g ? g.name : 'Groep', 'lid');
+  });
+
+  async function enterGroup(groupId, groupName, role) {
+    currentGroupId = groupId;
+    currentGroupName = groupName;
+    currentGroupRole = role;
+    localStorage.setItem('jlb_lastGroupId', groupId);
+    document.getElementById('authOverlay').style.display = 'none';
+    const lbl = document.getElementById('accountInfoSub');
+    if (lbl) lbl.textContent = groupName + ' (' + (role === 'admin' ? 'admin' : 'lid') + ') · ' + (currentUser ? currentUser.email : '');
+    await startApp();
+  }
+
+  document.getElementById('btnAccountInfo').addEventListener('click', async () => {
+    if (!(await appConfirm('Terug naar groepskeuze / uitloggen?'))) return;
+    document.getElementById('authOverlay').style.display = 'flex';
+    await loadMyGroups();
+  });
 
   /* ---------- IndexedDB helper ---------- */
   const DB_NAME = "jachtlogboek";
@@ -1035,13 +1206,19 @@
     if (isGebiedLocked()) { toast('🔒 Dit jachtgebied is vergrendeld — ontgrendel eerst'); return true; }
     return false;
   }
-  function genGebiedId() { return 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7); }
+  function genGebiedId() { return (crypto.randomUUID ? crypto.randomUUID() : 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)); }
 
   async function saveGebieden() {
     const g = getActiveGebied();
     if (g) g.zones = boundaryLatLngs;
-    await idbPut('settings', { key: 'jachtgebieden', value: jachtgebieden });
-    await idbPut('settings', { key: 'activeGebiedId', value: activeGebiedId });
+    if (currentGroupId) localStorage.setItem('jlb_activeGebiedId_' + currentGroupId, activeGebiedId || '');
+    if (!currentGroupId || jachtgebieden.length === 0) return;
+    const rows = jachtgebieden.map(gb => ({
+      id: gb.id, group_id: currentGroupId, name: gb.name, locked: !!gb.locked,
+      zones: gb.zones || null, created_by: currentUser ? currentUser.id : null
+    }));
+    const { error } = await sb.from('jachtgebieden').upsert(rows);
+    if (error) toast('Kon jachtgebied niet bewaren: ' + error.message);
   }
   async function saveBoundary() { await saveGebieden(); }
 
@@ -1153,18 +1330,21 @@
   });
 
   async function loadBoundary() {
-    const rec = await idbGet('settings', 'jachtgebieden');
-    if (rec && rec.value && rec.value.length) {
-      jachtgebieden = rec.value;
+    if (!currentGroupId) return;
+    const { data, error } = await sb.from('jachtgebieden').select('*').eq('group_id', currentGroupId).order('created_at');
+    if (error) { toast('Kon jachtgebieden niet laden: ' + error.message); jachtgebieden = []; }
+    else jachtgebieden = (data || []).map(r => ({ id: r.id, name: r.name, locked: !!r.locked, zones: r.zones || null }));
+
+    if (jachtgebieden.length === 0) {
+      const g = { id: genGebiedId(), name: 'Jachtgebied 1', zones: null, locked: false };
+      jachtgebieden = [g];
+      activeGebiedId = g.id;
+      await saveGebieden(); // insert de eerste rij
     } else {
-      // Migrate legacy single-boundary data if present, else start fresh
-      const legacy = await idbGet('settings', 'boundary');
-      jachtgebieden = [{ id: genGebiedId(), name: 'Jachtgebied 1', zones: (legacy && legacy.value) || null, locked: false }];
+      const stored = localStorage.getItem('jlb_activeGebiedId_' + currentGroupId);
+      activeGebiedId = (stored && jachtgebieden.some(g => g.id === stored)) ? stored : jachtgebieden[0].id;
     }
-    const activeRec = await idbGet('settings', 'activeGebiedId');
-    activeGebiedId = (activeRec && activeRec.value && jachtgebieden.some(g => g.id === activeRec.value)) ? activeRec.value : jachtgebieden[0].id;
     boundaryLatLngs = getActiveGebied().zones;
-    await saveGebieden();
     renderGebiedSelect();
     renderBoundary();
   }
@@ -2664,8 +2844,11 @@
     e.target.value = '';
   });
 
-  /* ---------- Init ---------- */
-  (async function init() {
+  /* ---------- Init (draait pas na inloggen + groep kiezen) ---------- */
+  let appStarted = false;
+  async function startApp() {
+    if (appStarted) return;
+    appStarted = true;
     await loadBoundary();
     await loadEntries();
     await loadMarkers();
@@ -2678,6 +2861,22 @@
       const pos = await getPosition();
       map.setView([pos.lat, pos.lng], 14);
     } catch (e) { /* keep default view */ }
+  }
+
+  /* ---------- Auth-opstart: bestaande sessie? ---------- */
+  (async function initAuth() {
+    try {
+      const { data } = await sb.auth.getSession();
+      if (data && data.session) {
+        currentUser = data.session.user;
+        await loadMyGroups();
+      } else {
+        showAuthStep('Login');
+      }
+    } catch (e) {
+      authMsg('Kon geen verbinding maken met de cloud — controleer je internetverbinding.');
+      showAuthStep('Login');
+    }
   })();
 
 })();
