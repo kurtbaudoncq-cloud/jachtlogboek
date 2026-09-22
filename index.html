@@ -845,27 +845,47 @@
     }
   });
 
-  async function loadMyGroups() {
+  function renderGroupsList(data) {
+    const listEl = document.getElementById('authGroupsList');
+    if (!data || data.length === 0) {
+      listEl.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Nog geen groepen.</div>';
+      return;
+    }
+    listEl.innerHTML = data.map(row =>
+      '<div class="list-card" data-id="' + row.groups.id + '" data-name="' + escapeHtmlEarly(row.groups.name) + '" data-role="' + row.role + '" style="cursor:pointer;">' +
+        '<div class="info"><div class="top"><span class="title">' + escapeHtmlEarly(row.groups.name) + '</span></div>' +
+        '<div class="meta">' + (row.role === 'admin' ? 'Admin · uitnodigingscode: ' + row.groups.invite_code : 'Lid') + '</div></div>' +
+      '</div>'
+    ).join('');
+    listEl.querySelectorAll('[data-id]').forEach(el => {
+      el.addEventListener('click', () => enterGroup(el.getAttribute('data-id'), el.getAttribute('data-name'), el.getAttribute('data-role')));
+    });
+  }
+
+  // autoEnter=true (standaard bij inloggen): sla het keuzescherm over als er 0 of 1 groep is.
+  // autoEnter=false (via het account-menu): toon altijd de volledige lijst, ook bij 1 groep.
+  async function loadMyGroups(autoEnter) {
+    if (autoEnter === undefined) autoEnter = true;
     authMsg('Groepen laden…');
     const { data, error } = await sb
       .from('group_members')
       .select('role, groups ( id, name, invite_code )')
       .eq('user_id', currentUser.id);
     if (error) { authMsg('Kon groepen niet laden: ' + error.message); return; }
-    const listEl = document.getElementById('authGroupsList');
-    if (!data || data.length === 0) {
-      listEl.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Je bent nog geen lid van een groep. Maak er een aan, of vraag een uitnodigingscode aan iemand die er al een heeft.</div>';
-    } else {
-      listEl.innerHTML = data.map(row =>
-        '<div class="list-card" data-id="' + row.groups.id + '" data-name="' + escapeHtmlEarly(row.groups.name) + '" data-role="' + row.role + '" style="cursor:pointer;">' +
-          '<div class="info"><div class="top"><span class="title">' + escapeHtmlEarly(row.groups.name) + '</span></div>' +
-          '<div class="meta">' + (row.role === 'admin' ? 'Admin · uitnodigingscode: ' + row.groups.invite_code : 'Lid') + '</div></div>' +
-        '</div>'
-      ).join('');
-      listEl.querySelectorAll('[data-id]').forEach(el => {
-        el.addEventListener('click', () => enterGroup(el.getAttribute('data-id'), el.getAttribute('data-name'), el.getAttribute('data-role')));
-      });
+
+    if (autoEnter && (!data || data.length === 0)) {
+      authMsg('Jouw omgeving klaarzetten…');
+      const base = (currentUser.user_metadata && currentUser.user_metadata.display_name) || (currentUser.email || 'Mijn').split('@')[0];
+      const { data: gid, error: gerr } = await sb.rpc('create_group', { gname: base + ' jachtgroep' });
+      if (gerr) { authMsg('Kon groep niet aanmaken: ' + gerr.message); renderGroupsList([]); showAuthStep('Groups'); return; }
+      enterGroup(gid, base + ' jachtgroep', 'admin');
+      return;
     }
+    if (autoEnter && data && data.length === 1) {
+      enterGroup(data[0].groups.id, data[0].groups.name, data[0].role);
+      return;
+    }
+    renderGroupsList(data);
     authMsg('');
     showAuthStep('Groups');
   }
@@ -901,9 +921,9 @@
   }
 
   document.getElementById('btnAccountInfo').addEventListener('click', async () => {
-    if (!(await appConfirm('Terug naar groepskeuze / uitloggen?'))) return;
+    if (!(await appConfirm('Groep wisselen, een nieuwe groep aanmaken, lid worden van een andere groep, of uitloggen?'))) return;
     document.getElementById('authOverlay').style.display = 'flex';
-    await loadMyGroups();
+    await loadMyGroups(false);
   });
 
   /* ---------- IndexedDB helper ---------- */
