@@ -2506,6 +2506,14 @@
     return m[sp] || '📍';
   }
 
+  /* ---------- Kleur per jaar (icoontjes op kaart + jaarfilter-chips) ---------- */
+  const YEAR_COLOR_PALETTE = ['#d94f04','#0077b6','#2a9d8f','#9b5de5','#e63946','#ffb703','#457b9d','#6a994e','#bc6c25','#b5179e'];
+  function yearColor(year) {
+    const y = parseInt(year, 10);
+    if (isNaN(y)) return YEAR_COLOR_PALETTE[0];
+    return YEAR_COLOR_PALETTE[((y % YEAR_COLOR_PALETTE.length) + YEAR_COLOR_PALETTE.length) % YEAR_COLOR_PALETTE.length];
+  }
+
   /* ---------- Wild filteren per jaar (lijst + wat er op de kaart staat) ---------- */
   function getWildYearFilter() { return localStorage.getItem('jlb_wildYearFilter') || 'all'; }
   function setWildYearFilter(v) { localStorage.setItem('jlb_wildYearFilter', v); }
@@ -2530,7 +2538,7 @@
     let current = getWildYearFilter();
     if (current !== 'all' && !years.includes(parseInt(current, 10))) current = 'all'; // bv. na verwijderen laatste registratie van dat jaar
     let html = '<div class="chip' + (current === 'all' ? ' active' : '') + '" data-year="all">Alle jaren</div>';
-    html += years.map(y => '<div class="chip' + (current === String(y) ? ' active' : '') + '" data-year="' + y + '">' + y + '</div>').join('');
+    html += years.map(y => '<div class="chip' + (current === String(y) ? ' active' : '') + '" data-year="' + y + '"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + yearColor(y) + ';margin-right:5px;vertical-align:middle;"></span>' + y + '</div>').join('');
     wrap.innerHTML = html;
     wrap.querySelectorAll('.chip').forEach(chip => {
       chip.addEventListener('click', () => {
@@ -2543,8 +2551,9 @@
     });
   }
   function addEntryMarker(entry) {
+    const col = yearColor(entryYear(entry));
     const icon = L.divIcon({
-      html: '<div style="background:#d94f04;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px;">' + speciesEmoji(entry.species) + '</span></div>',
+      html: '<div style="background:' + col + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px;">' + speciesEmoji(entry.species) + '</span></div>',
       className:'', iconSize:[30,30], iconAnchor:[15,28]
     });
     const marker = L.marker([entry.lat, entry.lng], { icon, draggable: true }).addTo(map);
@@ -2554,7 +2563,7 @@
       const url = URL.createObjectURL(entry.photo);
       popupHtml = '<img src="' + url + '" style="width:160px;border-radius:8px;display:block;margin-bottom:6px;">' + popupHtml;
     }
-    popupHtml += '<br><button type="button" onclick="window.__openWildEdit(' + entry.id + ')" style="margin-top:6px;padding:6px 10px;border:none;border-radius:6px;background:#d94f04;color:#fff;font-weight:600;">✏️ Bewerken / verwijderen</button>';
+    popupHtml += '<br><button type="button" onclick="window.__openWildEdit(' + entry.id + ')" style="margin-top:6px;padding:6px 10px;border:none;border-radius:6px;background:' + col + ';color:#fff;font-weight:600;">✏️ Bewerken / verwijderen</button>';
     marker.bindPopup(popupHtml);
     marker.on('dragend', async (ev) => {
       const ll = ev.target.getLatLng();
@@ -2845,7 +2854,7 @@
       card.className = 'list-card';
       const thumbHtml = entry.photo
         ? '<img class="thumb" src="' + URL.createObjectURL(entry.photo) + '">'
-        : '<div class="thumb">' + speciesEmoji(entry.species) + '</div>';
+        : '<div class="thumb" style="background:' + yearColor(entryYear(entry)) + ';color:#fff;">' + speciesEmoji(entry.species) + '</div>';
       card.innerHTML = thumbHtml +
         '<div class="info">' +
           '<div class="top"><span class="title">' + entry.species + '</span></div>' +
