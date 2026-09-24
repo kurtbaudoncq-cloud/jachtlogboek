@@ -116,8 +116,17 @@
   .wind-card.show{ display:flex !important; }
   .wind-arrow{ font-size:30px; line-height:1; display:inline-block; transition:transform .4s ease; }
   .wind-text{ display:flex; flex-direction:column; line-height:1.25; }
-  .wind-text strong{ font-size:15px; }
+  .wind-text strong{ font-size:15px; transition:color .3s ease; }
   .wind-text span{ font-size:11px; color:var(--parchment-dim); }
+  .wind-scale{
+    position:relative; margin-top:6px; width:86px; height:6px; border-radius:4px;
+    background:linear-gradient(to right, #22d3ee 0%, #facc15 54%, #ef4444 100%);
+  }
+  .wind-scale-marker{
+    position:absolute; top:50%; left:0%; width:9px; height:9px; border-radius:50%;
+    background:#fff; border:2px solid rgba(16,28,19,.9); box-shadow:0 0 3px rgba(0,0,0,.5);
+    transform:translate(-50%,-50%); transition:left .3s ease;
+  }
 
   .overlay-controls{
     position:absolute; left:12px; right:12px; bottom:calc(96px + var(--safe-bottom)); z-index:650;
@@ -463,6 +472,9 @@
     <div class="wind-text">
       <strong id="windSpeedText">–</strong>
       <span id="windDirText">–</span>
+      <div class="wind-scale">
+        <div class="wind-scale-marker" id="windScaleMarker"></div>
+      </div>
     </div>
   </div>
 
@@ -1955,8 +1967,15 @@
   function showWindData(fromDeg, speed, lat, lng) {
     const towardsDeg = (fromDeg + 180) % 360;
     document.getElementById('windArrow').style.transform = 'rotate(' + towardsDeg + 'deg)';
-    document.getElementById('windSpeedText').textContent = Math.round(speed) + ' km/u';
+    const speedColor = windColor(speed);
+    const speedTextEl = document.getElementById('windSpeedText');
+    speedTextEl.textContent = Math.round(speed) + ' km/u';
+    speedTextEl.style.color = speedColor;
     document.getElementById('windDirText').textContent = 'Uit ' + compassLabel(fromDeg) + ' · pijl = waarheen';
+    const markerPct = Math.max(0, Math.min(1, speed / 65)) * 100;
+    const marker = document.getElementById('windScaleMarker');
+    marker.style.left = markerPct + '%';
+    marker.style.background = speedColor;
     lastWindDir = fromDeg;
     lastWindSpeed = speed;
     if (windOn) renderWindGrid(fromDeg, speed);
