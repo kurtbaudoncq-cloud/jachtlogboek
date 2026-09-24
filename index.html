@@ -742,6 +742,21 @@
     <div class="hint" style="margin-top:14px;">
       De back-up bevat je jachtgebied, wildregistraties (incl. foto's), markeringen en sporen. Bewaar dit bestand ergens veilig — als je de browser-cache wist, gaat lokale data verloren.
     </div>
+    <div class="divider"></div>
+    <button class="btn btn-outline" id="btnImportWildKml" style="margin-bottom:10px;">🦌 Historische wildregistraties importeren (KML/KMZ)</button>
+    <input type="file" id="fileImportWildKml" class="file-hidden" accept=".kml,.kmz">
+    <div class="field" id="importWildKmlArea" style="display:none; margin-bottom:10px;">
+      <div class="hint" id="importWildKmlSummary" style="margin-bottom:8px;"></div>
+      <label>Soort om aan deze registraties toe te kennen</label>
+      <input type="text" id="importWildKmlSpecies" placeholder="Bv. Ree (bok)">
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-ghost" id="btnCancelImportWildKml">Annuleren</button>
+        <button class="btn btn-primary" id="btnConfirmImportWildKml">Importeren</button>
+      </div>
+    </div>
+    <div class="hint" style="margin-bottom:14px;">
+      Werkt met een export uit Google My Maps (⋮ → Exporteren naar KML/KMZ). Enkel puntmarkeringen waarvan de naam of omschrijving een datum bevat (bv. "BOK 5 (10/04/2023) 20:05") worden herkend als wildregistratie — grenzen, hutten en andere markeringen worden automatisch genegeerd. Foto's uit Google My Maps worden niet meegenomen (die blijven enkel via Google bereikbaar); voeg die eventueel later apart toe per registratie.
+    </div>
   </div>
 
   <!-- Tableau overview sheet -->
@@ -1655,6 +1670,94 @@
     else handleGeometry(obj);
     return rings;
   }
+
+  /* ---------- Historische wildregistraties importeren uit KML/KMZ (bv. Google My Maps) ---------- */
+  function parseKmlWildPoints(text) {
+    const xml = new DOMParser().parseFromString(text, 'text/xml');
+    const placemarks = xml.getElementsByTagName('Placemark');
+    const dateTimeRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})\)?\s*(\d{1,2}):(\d{2})/;
+    const dateOnlyRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
+    const out = [];
+    for (const pm of placemarks) {
+      const pointNode = pm.getElementsByTagName('Point')[0];
+      if (!pointNode) continue; // enkel puntmarkeringen — grenzen/lijnen worden overgeslagen
+      const coordNode = pointNode.getElementsByTagName('coordinates')[0];
+      if (!coordNode) continue;
+      const parts = coordNode.textContent.trim().split(',');
+      const lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      const nameNode = pm.getElementsByTagName('name')[0];
+      const name = nameNode ? nameNode.textContent.trim() : '';
+      const descNode = pm.getElementsByTagName('description')[0];
+      const searchText = name + ' ' + (descNode ? descNode.textContent : '');
+      let ts = null;
+      let m = searchText.match(dateTimeRe);
+      if (m) ts = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).getTime();
+      else {
+        m = searchText.match(dateOnlyRe);
+        if (m) ts = new Date(+m[3], +m[2] - 1, +m[1], 12, 0).getTime();
+      }
+      if (ts === null || isNaN(ts)) continue; // geen datum herkend = waarschijnlijk geen wildregistratie
+      out.push({ name, lat, lng, ts });
+    }
+    return out;
+  }
+  let pendingWildImportPoints = [];
+  document.getElementById('btnImportWildKml').addEventListener('click', () => document.getElementById('fileImportWildKml').click());
+  document.getElementById('fileImportWildKml').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    let text = '';
+    try {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.kmz')) {
+        const zip = await JSZip.loadAsync(file);
+        const kmlEntry = Object.values(zip.files).find(f => f.name.toLowerCase().endsWith('.kml'));
+        if (!kmlEntry) throw new Error('Geen KML-bestand gevonden in dit KMZ-archief');
+        text = await kmlEntry.async('text');
+      } else {
+        text = await file.text();
+      }
+    } catch (err) { toast('Kon bestand niet lezen: ' + err.message); e.target.value = ''; return; }
+    pendingWildImportPoints = parseKmlWildPoints(text);
+    e.target.value = '';
+    const area = document.getElementById('importWildKmlArea');
+    if (pendingWildImportPoints.length === 0) {
+      toast('Geen puntmarkeringen met datum gevonden in dit bestand');
+      area.style.display = 'none';
+      return;
+    }
+    document.getElementById('importWildKmlSummary').textContent =
+      pendingWildImportPoints.length + ' punt(en) gevonden met datum (bv. "' + pendingWildImportPoints[0].name + '"). Kies hieronder welke soort je eraan wil toekennen.';
+    area.style.display = '';
+  });
+  document.getElementById('btnCancelImportWildKml').addEventListener('click', () => {
+    document.getElementById('importWildKmlArea').style.display = 'none';
+    pendingWildImportPoints = [];
+  });
+  document.getElementById('btnConfirmImportWildKml').addEventListener('click', async () => {
+    const species = document.getElementById('importWildKmlSpecies').value.trim();
+    if (!species) { toast('Vul een soort in'); return; }
+    if (!pendingWildImportPoints.length) return;
+    if (!(await appConfirm(pendingWildImportPoints.length + ' wildregistraties importeren als "' + species + '"?'))) return;
+    let count = 0;
+    for (const pt of pendingWildImportPoints) {
+      const inside = isInsideBoundary(pt.lat, pt.lng);
+      const entry = {
+        species, note: pt.name, lat: pt.lat, lng: pt.lng, accuracy: null,
+        insideBoundary: inside, timestamp: pt.ts, photo: null
+      };
+      const id = await idbAdd('entries', entry);
+      entry.id = id;
+      entries.push(entry);
+      addEntryMarker(entry);
+      count++;
+    }
+    pendingWildImportPoints = [];
+    document.getElementById('importWildKmlArea').style.display = 'none';
+    closeAllSheets();
+    toast(count + ' wildregistraties geïmporteerd');
+  });
 
   document.getElementById('btnImportBoundary').addEventListener('click', () => document.getElementById('fileImportBoundary').click());
   document.getElementById('fileImportBoundary').addEventListener('change', async (e) => {
