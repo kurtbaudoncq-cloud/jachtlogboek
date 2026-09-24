@@ -464,6 +464,14 @@
     </div>
   </div>
 
+  <div class="draw-banner" id="moveEntryBanner">
+    <span>Sleep de marker naar de juiste plek</span>
+    <div class="actions">
+      <button id="moveEntryCancel">Annuleer</button>
+      <button class="done" id="moveEntryConfirm">✓ Bevestig</button>
+    </div>
+  </div>
+
   <div class="float-stack">
     <button class="float-btn" id="btnLayer" title="Kaartlaag wisselen">🛰️</button>
     <button class="float-btn" id="btnLocate" title="Mijn locatie">◎</button>
@@ -751,11 +759,6 @@
     <input type="file" id="fileImportData" class="file-hidden" accept=".json">
     <div class="hint" style="margin-top:14px;">
       De back-up bevat je jachtgebied, wildregistraties (incl. foto's), markeringen en sporen — handig als extra kopie, maar je data staat sowieso al veilig in de cloud.
-    </div>
-    <div class="divider"></div>
-    <button class="btn btn-outline" id="btnDedupWild" style="margin-bottom:10px;">🧹 Dubbele wildregistraties opruimen</button>
-    <div class="hint" style="margin-bottom:14px;">
-      Zoekt registraties met dezelfde soort, positie en datum/tijd (bv. door een import die per ongeluk dubbel gebeurde) en houdt er telkens maar 1 van over.
     </div>
     <div class="divider"></div>
     <button class="btn btn-outline" id="btnImportWildKml" style="margin-bottom:10px;">🦌 Historische wildregistraties importeren (KML/KMZ)</button>
@@ -2551,18 +2554,28 @@
 
   /* ---------- Add wild sheet ---------- */
   const speciesGrid = document.getElementById('speciesGrid');
-  SPECIES.forEach(sp => {
-    const chip = document.createElement('div');
-    chip.className = 'chip';
-    chip.textContent = sp;
-    chip.addEventListener('click', () => {
-      selectedSpecies = sp;
-      document.getElementById('speciesOther').value = '';
-      [...speciesGrid.children].forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
+  // Combineert de vaste basislijst met soorten die via Tableau zijn toegevoegd,
+  // zodat een nieuwe soort automatisch ook bij wildregistratie verschijnt.
+  function allWildSpecies() {
+    const extra = tableauSpeciesCatalog.filter(sp => !SPECIES.includes(sp));
+    return SPECIES.concat(extra);
+  }
+  function buildSpeciesGrid() {
+    const prevSelected = selectedSpecies;
+    speciesGrid.innerHTML = '';
+    allWildSpecies().forEach(sp => {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (sp === prevSelected ? ' active' : '');
+      chip.textContent = sp;
+      chip.addEventListener('click', () => {
+        selectedSpecies = sp;
+        document.getElementById('speciesOther').value = '';
+        [...speciesGrid.children].forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+      });
+      speciesGrid.appendChild(chip);
     });
-    speciesGrid.appendChild(chip);
-  });
+  }
   document.getElementById('speciesOther').addEventListener('input', () => {
     selectedSpecies = null;
     [...speciesGrid.children].forEach(c => c.classList.remove('active'));
@@ -2797,28 +2810,43 @@
     const en = entries.find(e => e.id === id);
     if (en) { closeAllSheets(); openWildEditSheet(en); }
   };
-  // Positie van een registratie wijzigen kan niet zomaar door te verslepen (te makkelijk om
-  // per ongeluk te doen) — het gaat via deze bewuste tussenstap: tik op de kaart + bevestig.
+  // Positie van een registratie wijzigen kan niet zomaar door op de kaart te tikken/slepen
+  // (dat botst met pannen van de kaart zelf) — het gaat via een aparte, tijdelijke sleep-marker
+  // die je met een duim kan verslepen, met een expliciete bevestig/annuleer-knop.
+  let moveEntryTempMarker = null;
+  let moveEntryTargetId = null;
   window.__moveWildEntry = function(id) {
     const en = entries.find(e => e.id === id);
     if (!en) return;
-    if (entryMarkers[id]) entryMarkers[id].closePopup();
+    if (entryMarkers[id]) { entryMarkers[id].closePopup(); map.removeLayer(entryMarkers[id]); delete entryMarkers[id]; }
     closeAllSheets();
-    toast('Tik op de kaart op de juiste locatie voor deze registratie');
-    map.once('click', async (ev) => {
-      const ll = ev.latlng;
-      const ok = await appConfirm('Positie van "' + en.species + '" (' + fmtDateShort(en.timestamp) + ') verplaatsen naar dit punt?');
-      if (!ok) return;
+    moveEntryTargetId = id;
+    const dragIcon = L.divIcon({
+      html: '<div style="width:26px;height:26px;border-radius:50%;background:#1e6fd9;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);"></div>',
+      className:'', iconSize:[26,26], iconAnchor:[13,13]
+    });
+    moveEntryTempMarker = L.marker([en.lat, en.lng], { icon: dragIcon, draggable: true }).addTo(map);
+    document.getElementById('moveEntryBanner').classList.add('show');
+  };
+  async function finishMoveEntry(confirmed) {
+    const id = moveEntryTargetId;
+    const en = entries.find(e => e.id === id);
+    document.getElementById('moveEntryBanner').classList.remove('show');
+    if (moveEntryTempMarker) { map.removeLayer(moveEntryTempMarker); }
+    if (confirmed && en && moveEntryTempMarker) {
+      const ll = moveEntryTempMarker.getLatLng();
       en.lat = ll.lat; en.lng = ll.lng;
       en.insideBoundary = isInsideBoundary(ll.lat, ll.lng);
       en.updated_at = Date.now(); en._dirty = true;
       await idbPut('entries', en);
-      if (entryMarkers[id]) { map.removeLayer(entryMarkers[id]); delete entryMarkers[id]; }
-      addEntryMarker(en);
       toast('Positie aangepast');
       syncAllStores();
-    });
-  };
+    }
+    moveEntryTempMarker = null; moveEntryTargetId = null;
+    if (en) addEntryMarker(en);
+  }
+  document.getElementById('moveEntryCancel').addEventListener('click', () => finishMoveEntry(false));
+  document.getElementById('moveEntryConfirm').addEventListener('click', () => finishMoveEntry(true));
   function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   async function loadEntries() {
@@ -2876,6 +2904,7 @@
   document.getElementById('btnSaveTableauSpecies').addEventListener('click', async () => {
     if (tableauSpeciesSelected.length === 0) { toast('Kies minstens één soort'); return; }
     await saveTableauSpeciesConfig();
+    buildSpeciesGrid(); // nieuwe soorten meteen ook beschikbaar bij wildregistratie
     toast('Soortenlijst bewaard');
     openSheet('tableau');
   });
@@ -3402,33 +3431,6 @@
     await syncAllStores();
     toast('Synchronisatie voltooid');
   });
-
-  document.getElementById('btnDedupWild').addEventListener('click', async () => {
-    const groups = {};
-    entries.forEach(en => {
-      const key = [en.species, (en.note || ''), en.lat.toFixed(5), en.lng.toFixed(5), en.timestamp].join('|');
-      (groups[key] = groups[key] || []).push(en);
-    });
-    const toRemove = [];
-    Object.values(groups).forEach(group => {
-      if (group.length < 2) return;
-      // de oudste (kleinste updated_at, of gewoon de eerste) blijft staan, de rest is een dubbel
-      const sorted = group.slice().sort((a, b) => (a.updated_at || 0) - (b.updated_at || 0));
-      toRemove.push(...sorted.slice(1));
-    });
-    if (toRemove.length === 0) { toast('Geen dubbels gevonden'); return; }
-    if (!(await appConfirm(toRemove.length + ' dubbele registratie(s) gevonden. Deze verwijderen (telkens 1 per groep blijft staan)?'))) return;
-    for (const en of toRemove) {
-      await idbDelete('entries', en.id);
-      if (entryMarkers[en.id]) { map.removeLayer(entryMarkers[en.id]); delete entryMarkers[en.id]; }
-      addPendingDelete('entries', en.id);
-    }
-    const removeIds = new Set(toRemove.map(en => en.id));
-    entries = entries.filter(en => !removeIds.has(en.id));
-    renderWildList();
-    toast(toRemove.length + ' dubbel(s) verwijderd');
-    syncAllStores();
-  });
   document.getElementById('btnExport').addEventListener('click', async () => {
     toast('Bestand wordt voorbereid…');
     const exportEntries = [];
@@ -3542,6 +3544,7 @@
     if (appStarted) return;
     appStarted = true;
     await loadTableauSpeciesConfig();
+    buildSpeciesGrid();
     await loadCustomMarkerTypes();
     buildMarkerTypeGrid();
     try {
