@@ -354,6 +354,20 @@
     #map{ margin-left:300px; }
     .sheet-overlay{ left:300px; }
   }
+
+  /* ---------- Windveld animatie ---------- */
+  @keyframes windFlow{
+    0%   { transform:translateY(11px); opacity:0; }
+    18%  { opacity:1; }
+    82%  { opacity:1; }
+    100% { transform:translateY(-11px); opacity:0; }
+  }
+  .wind-chevron{
+    position:absolute; left:50%; top:50%; width:0; height:0; margin-left:-5px; margin-top:-4px;
+    border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:8px solid #22d3ee;
+    filter:drop-shadow(0 0 2px #000) drop-shadow(0 0 1px #000);
+    animation-name:windFlow; animation-timing-function:linear; animation-iteration-count:infinite;
+  }
 </style>
 </head>
 <body>
@@ -1854,10 +1868,21 @@
   let lastWindData = null; // {speed, dir, lat, lng, at}
   let windGridMarkers = [];
   let lastWindDir = null;
+  let lastWindSpeed = 0;
 
-  function buildGridArrowIcon(towardsDeg) {
+  // Hogere windsnelheid = kortere animatieduur = sneller "stromende" pijlen
+  function windFlowDuration(speedKmh) {
+    const s = Number(speedKmh) || 0;
+    return Math.max(0.5, Math.min(2.4, 2.4 - s * 0.045));
+  }
+  function buildGridArrowIcon(towardsDeg, speedKmh) {
+    const dur = windFlowDuration(speedKmh);
+    const delays = [0, dur / 3, (2 * dur) / 3];
+    const chevrons = delays.map(d =>
+      '<div class="wind-chevron" style="animation-duration:' + dur.toFixed(2) + 's; animation-delay:-' + d.toFixed(2) + 's;"></div>'
+    ).join('');
     return L.divIcon({
-      html: '<div style="transform:rotate(' + towardsDeg + 'deg); font-size:20px; line-height:1; color:#22d3ee; text-shadow:0 0 3px #000, 0 0 4px #000;">↑</div>',
+      html: '<div style="width:24px;height:24px;position:relative;transform:rotate(' + towardsDeg + 'deg);">' + chevrons + '</div>',
       className: '', iconSize: [24, 24], iconAnchor: [12, 12]
     });
   }
@@ -1865,14 +1890,14 @@
     windGridMarkers.forEach(m => map.removeLayer(m));
     windGridMarkers = [];
   }
-  function renderWindGrid(fromDeg) {
+  function renderWindGrid(fromDeg, speedKmh) {
     clearWindGrid();
     const towardsDeg = (fromDeg + 180) % 360;
     const b = map.getBounds();
     const rows = 7, cols = 7;
     const latStep = (b.getNorth() - b.getSouth()) / (rows + 1);
     const lngStep = (b.getEast() - b.getWest()) / (cols + 1);
-    const icon = buildGridArrowIcon(towardsDeg);
+    const icon = buildGridArrowIcon(towardsDeg, speedKmh);
     for (let r = 1; r <= rows; r++) {
       for (let c = 1; c <= cols; c++) {
         const lat = b.getSouth() + r * latStep;
@@ -1883,7 +1908,7 @@
     }
   }
   function onMapMoveForWind() {
-    if (windOn && lastWindDir !== null) renderWindGrid(lastWindDir);
+    if (windOn && lastWindDir !== null) renderWindGrid(lastWindDir, lastWindSpeed);
   }
   map.on('moveend', onMapMoveForWind);
 
@@ -1913,7 +1938,8 @@
     document.getElementById('windSpeedText').textContent = Math.round(speed) + ' km/u';
     document.getElementById('windDirText').textContent = 'Uit ' + compassLabel(fromDeg) + ' · pijl = waarheen';
     lastWindDir = fromDeg;
-    if (windOn) renderWindGrid(fromDeg);
+    lastWindSpeed = speed;
+    if (windOn) renderWindGrid(fromDeg, speed);
   }
   document.getElementById('btnWind').addEventListener('click', async () => {
     windOn = !windOn;
