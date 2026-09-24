@@ -1875,11 +1875,31 @@
     const s = Number(speedKmh) || 0;
     return Math.max(0.5, Math.min(2.4, 2.4 - s * 0.045));
   }
+  // Kleurverloop: rustig (cyaan) -> stevig (geel/oranje) -> storm (rood)
+  const WIND_COLOR_STOPS = [
+    { s: 0,  c: [34, 211, 238] },  // #22d3ee
+    { s: 35, c: [250, 204, 21] },  // #facc15
+    { s: 65, c: [239, 68, 68] }    // #ef4444
+  ];
+  function windColor(speedKmh) {
+    const s = Math.max(0, Number(speedKmh) || 0);
+    let a = WIND_COLOR_STOPS[0], b = WIND_COLOR_STOPS[WIND_COLOR_STOPS.length - 1];
+    for (let i = 0; i < WIND_COLOR_STOPS.length - 1; i++) {
+      if (s >= WIND_COLOR_STOPS[i].s && s <= WIND_COLOR_STOPS[i + 1].s) {
+        a = WIND_COLOR_STOPS[i]; b = WIND_COLOR_STOPS[i + 1]; break;
+      }
+    }
+    const span = (b.s - a.s) || 1;
+    const t = Math.max(0, Math.min(1, (s - a.s) / span));
+    const rgb = [0, 1, 2].map(i => Math.round(a.c[i] + (b.c[i] - a.c[i]) * t));
+    return 'rgb(' + rgb.join(',') + ')';
+  }
   function buildGridArrowIcon(towardsDeg, speedKmh) {
     const dur = windFlowDuration(speedKmh);
+    const color = windColor(speedKmh);
     const delays = [0, dur / 3, (2 * dur) / 3];
     const chevrons = delays.map(d =>
-      '<div class="wind-chevron" style="animation-duration:' + dur.toFixed(2) + 's; animation-delay:-' + d.toFixed(2) + 's;"></div>'
+      '<div class="wind-chevron" style="animation-duration:' + dur.toFixed(2) + 's; animation-delay:-' + d.toFixed(2) + 's; border-bottom-color:' + color + ';"></div>'
     ).join('');
     return L.divIcon({
       html: '<div style="width:24px;height:24px;position:relative;transform:rotate(' + towardsDeg + 'deg);">' + chevrons + '</div>',
