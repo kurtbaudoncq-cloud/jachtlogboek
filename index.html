@@ -737,12 +737,16 @@
     <div class="sheet-handle"></div>
     <div class="back-row"><button class="icon-btn" data-back>←</button></div>
     <h2>Data</h2>
-    <div class="subtitle">Alles blijft standaard lokaal op dit toestel.</div>
+    <div class="subtitle">Wordt automatisch bewaard in de cloud (ook zonder bereik: dan synct het zodra je weer internet hebt).</div>
+    <div class="field" style="background:#f4f1ea;border-radius:10px;padding:10px 12px;margin-bottom:14px;">
+      <div id="syncStatusText" style="font-size:13px;"></div>
+      <button class="btn btn-outline" id="btnSyncNow" style="margin-top:8px;">🔄 Synchroniseer nu</button>
+    </div>
     <button class="btn btn-secondary" id="btnExport" style="margin-bottom:10px;">⇩ Back-up downloaden</button>
     <button class="btn btn-outline" id="btnImport">⇧ Back-up terugzetten</button>
     <input type="file" id="fileImportData" class="file-hidden" accept=".json">
     <div class="hint" style="margin-top:14px;">
-      De back-up bevat je jachtgebied, wildregistraties (incl. foto's), markeringen en sporen. Bewaar dit bestand ergens veilig — als je de browser-cache wist, gaat lokale data verloren.
+      De back-up bevat je jachtgebied, wildregistraties (incl. foto's), markeringen en sporen — handig als extra kopie, maar je data staat sowieso al veilig in de cloud.
     </div>
     <div class="divider"></div>
     <button class="btn btn-outline" id="btnImportWildKml" style="margin-bottom:10px;">🦌 Historische wildregistraties importeren (KML/KMZ)</button>
@@ -1040,6 +1044,198 @@
     }));
   }
 
+  /* ---------- Cloud-sync: wildregistraties, markers, sporen, tableaus ----------
+     Alles wordt eerst lokaal (IndexedDB) bewaard zodat de app ook zonder bereik
+     blijft werken; zodra er internet is wordt alles automatisch naar Supabase
+     gesynchroniseerd (en van daaruit ook naar andere toestellen/leden). */
+  function genId() { return (crypto.randomUUID ? crypto.randomUUID() : 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9)); }
+
+  function blobToBase64(blob) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+  function base64ToBlob(dataUrl) {
+    try {
+      const parts = dataUrl.split(',');
+      const mimeMatch = parts[0].match(/data:(.*?);base64/);
+      const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+      const bin = atob(parts[1]);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: mime });
+    } catch (e) { return null; }
+  }
+  function compressImage(blob, maxDim, quality) {
+    maxDim = maxDim || 1280; quality = quality || 0.75;
+    return new Promise((res) => {
+      const img = new Image();
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
+          else { width = Math.round(width * maxDim / height); height = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(b => res(b || blob), 'image/jpeg', quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); res(blob); };
+      img.src = url;
+    });
+  }
+
+  // Wachtrij van id's die lokaal verwijderd zijn maar nog niet bevestigd verwijderd op de server
+  // (overleeft een offline periode, want zit in localStorage i.p.v. enkel in het geheugen).
+  function pendingDeletesKey(store) { return 'jlb_pendingDel_' + store; }
+  function getPendingDeletes(store) {
+    try { return JSON.parse(localStorage.getItem(pendingDeletesKey(store)) || '[]'); } catch (e) { return []; }
+  }
+  function addPendingDelete(store, id) {
+    const list = getPendingDeletes(store);
+    if (!list.includes(id)) { list.push(id); localStorage.setItem(pendingDeletesKey(store), JSON.stringify(list)); }
+  }
+  function clearPendingDelete(store, id) {
+    localStorage.setItem(pendingDeletesKey(store), JSON.stringify(getPendingDeletes(store).filter(x => x !== id)));
+  }
+
+  const SYNC_STORES = {
+    entries: {
+      table: 'wild_entries', hasPhoto: true, photoField: 'photo_base64',
+      toRow: (e) => ({ id: String(e.id), gebied_id: e.gebied_id, species: e.species, note: e.note || null,
+        lat: e.lat, lng: e.lng, accuracy: (e.accuracy != null ? e.accuracy : null),
+        inside_boundary: (e.insideBoundary != null ? e.insideBoundary : null), ts: e.timestamp,
+        updated_at: e.updated_at, created_by: currentUser ? currentUser.id : null }),
+      fromRow: (r) => ({ id: r.id, gebied_id: r.gebied_id, species: r.species, note: r.note || '',
+        lat: r.lat, lng: r.lng, accuracy: r.accuracy, insideBoundary: r.inside_boundary, timestamp: r.ts,
+        updated_at: r.updated_at, _dirty: false })
+    },
+    markers: {
+      table: 'markers', hasPhoto: false,
+      toRow: (m) => ({ id: String(m.id), gebied_id: m.gebied_id, type: m.type, note: m.note || null,
+        lat: m.lat, lng: m.lng, ts: m.timestamp, updated_at: m.updated_at, created_by: currentUser ? currentUser.id : null }),
+      fromRow: (r) => ({ id: r.id, gebied_id: r.gebied_id, type: r.type, note: r.note || '',
+        lat: r.lat, lng: r.lng, timestamp: r.ts, updated_at: r.updated_at, _dirty: false })
+    },
+    tracks: {
+      table: 'tracks', hasPhoto: false,
+      toRow: (t) => ({ id: String(t.id), gebied_id: t.gebied_id, points: t.points, start_time: t.startTime,
+        end_time: t.endTime, distance: t.distance, updated_at: t.updated_at, created_by: currentUser ? currentUser.id : null }),
+      fromRow: (r) => ({ id: r.id, gebied_id: r.gebied_id, points: r.points, startTime: r.start_time,
+        endTime: r.end_time, distance: r.distance, updated_at: r.updated_at, _dirty: false })
+    },
+    tableaus: {
+      table: 'tableaus', hasPhoto: true, photoField: 'photo_base64',
+      toRow: (t) => ({ id: String(t.id), gebied_id: t.gebied_id, date: t.date, counts: t.counts, note: t.note || null,
+        ts: t.timestamp, updated_at: t.updated_at, created_by: currentUser ? currentUser.id : null }),
+      fromRow: (r) => ({ id: r.id, gebied_id: r.gebied_id, date: r.date, counts: r.counts, note: r.note || '',
+        timestamp: r.ts, updated_at: r.updated_at, _dirty: false })
+    }
+  };
+  function syncArrayFor(storeName) { return { entries, markers, tracks, tableaus }[storeName]; }
+
+  async function pushStore(storeName) {
+    if (!navigator.onLine || !activeGebiedId) return;
+    const cfg = SYNC_STORES[storeName];
+    const arr = syncArrayFor(storeName);
+    const dirty = arr.filter(r => r._dirty && r.gebied_id === activeGebiedId);
+    for (const rec of dirty) {
+      const row = cfg.toRow(rec);
+      if (cfg.hasPhoto) row[cfg.photoField] = (rec.photo instanceof Blob) ? await blobToBase64(rec.photo) : null;
+      const { error } = await sb.from(cfg.table).upsert(row);
+      if (!error) { rec._dirty = false; await idbPut(storeName, rec); }
+    }
+    for (const id of getPendingDeletes(storeName)) {
+      const { error } = await sb.from(cfg.table).delete().eq('id', id);
+      if (!error) clearPendingDelete(storeName, id);
+    }
+  }
+  async function pullStore(storeName) {
+    if (!navigator.onLine || !activeGebiedId) return;
+    const cfg = SYNC_STORES[storeName];
+    const { data, error } = await sb.from(cfg.table).select('*').eq('gebied_id', activeGebiedId);
+    if (error || !data) return;
+    const arr = syncArrayFor(storeName);
+    const localById = {}; arr.forEach(r => { localById[r.id] = r; });
+    for (const row of data) {
+      const local = localById[row.id];
+      if (local && local._dirty) continue; // lokale wijziging nog niet gepusht, niet overschrijven
+      const rec = cfg.fromRow(row);
+      if (cfg.hasPhoto) {
+        if (row[cfg.photoField]) rec.photo = (local && local.photo) ? local.photo : base64ToBlob(row[cfg.photoField]);
+        else rec.photo = null;
+      }
+      await idbPut(storeName, rec);
+      if (local) Object.assign(local, rec); else arr.push(rec);
+    }
+    const remoteIds = new Set(data.map(r => r.id));
+    const pendingDelIds = new Set(getPendingDeletes(storeName));
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const r = arr[i];
+      if (r.gebied_id === activeGebiedId && !r._dirty && !pendingDelIds.has(r.id) && !remoteIds.has(r.id)) {
+        arr.splice(i, 1);
+        await idbDelete(storeName, r.id);
+      }
+    }
+  }
+  async function syncStore(storeName) { await pushStore(storeName); await pullStore(storeName); }
+
+  let syncing = false;
+  let lastSyncAt = null;
+  function pendingSyncCount() {
+    return ['entries','markers','tracks','tableaus'].reduce((n, s) =>
+      n + syncArrayFor(s).filter(r => r._dirty).length + getPendingDeletes(s).length, 0);
+  }
+  function updateSyncStatusUi() {
+    const el = document.getElementById('syncStatusText');
+    if (!el) return;
+    if (syncing) { el.textContent = '🔄 Bezig met synchroniseren...'; return; }
+    if (!navigator.onLine) { el.textContent = '📴 Offline — wijzigingen worden bewaard tot je weer bereik hebt (' + pendingSyncCount() + ' wachtend)'; return; }
+    const p = pendingSyncCount();
+    el.textContent = p > 0 ? ('⏳ ' + p + ' wijziging(en) worden gesynchroniseerd...')
+      : (lastSyncAt ? ('✅ Alles gesynchroniseerd · laatst om ' + new Date(lastSyncAt).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})) : '');
+  }
+  async function syncAllStores() {
+    if (!currentGroupId || !activeGebiedId) return;
+    if (!navigator.onLine) { updateSyncStatusUi(); return; }
+    if (syncing) return;
+    syncing = true; updateSyncStatusUi();
+    try {
+      await syncStore('entries'); await syncStore('markers'); await syncStore('tracks'); await syncStore('tableaus');
+      lastSyncAt = Date.now();
+    } catch (e) { /* stille fout, volgende sync-poging probeert opnieuw */ }
+    syncing = false; updateSyncStatusUi();
+    renderWildList(); renderMarkersList(); renderTracksList(); if (typeof renderTableau === 'function') renderTableau();
+  }
+  window.addEventListener('online', () => syncAllStores());
+  window.addEventListener('offline', () => updateSyncStatusUi());
+  setInterval(() => { if (document.visibilityState === 'visible') syncAllStores(); }, 120000);
+
+  // Eenmalige migratie: oude lokale data (numerieke id's, geen gebied_id) krijgt een
+  // vaste cloud-id en wordt gekoppeld aan het huidige jachtgebied.
+  async function migrateLocalDataToCloud() {
+    if (localStorage.getItem('jlb_didCloudMigration_v1')) return;
+    if (!activeGebiedId) return;
+    for (const storeName of ['entries','markers','tracks','tableaus']) {
+      const all = await idbGetAll(storeName);
+      for (const rec of all) {
+        if (typeof rec.id === 'number' || !rec.gebied_id) {
+          const oldId = rec.id;
+          const newRec = Object.assign({}, rec, { id: genId(), gebied_id: rec.gebied_id || activeGebiedId, updated_at: Date.now(), _dirty: true });
+          await idbDelete(storeName, oldId);
+          await idbAdd(storeName, newRec);
+        }
+      }
+    }
+    localStorage.setItem('jlb_didCloudMigration_v1', '1');
+  }
+
   /* ---------- State ---------- */
   let boundaryLatLngs = null;
   let jachtgebieden = [];
@@ -1194,7 +1390,7 @@
       else if (target === 'weather') { openSheet('weather'); loadWeatherPanel(); }
       else if (target === 'boundary') { openSheet('boundary'); }
       else if (target === 'tableau') { openSheet('tableau'); renderTableau(); }
-      else if (target === 'data') { openSheet('data'); }
+      else if (target === 'data') { openSheet('data'); updateSyncStatusUi(); }
     });
   });
   document.querySelectorAll('[data-back]').forEach(btn => {
@@ -1373,6 +1569,8 @@
     await saveGebieden();
     renderGebiedSelect();
     renderBoundary();
+    await loadEntries(); await loadMarkers(); await loadTracks(); await loadTableaus();
+    syncAllStores();
   });
   let gebiedNameEditMode = null; // 'new' | 'rename'
   function openGebiedNameEdit(mode, prefill) {
@@ -1403,6 +1601,7 @@
       await saveGebieden();
       renderGebiedSelect();
       renderBoundary();
+      await loadEntries(); await loadMarkers(); await loadTracks(); await loadTableaus();
       toast('Jachtgebied "' + g.name + '" aangemaakt');
     } else if (gebiedNameEditMode === 'rename') {
       const g = getActiveGebied();
@@ -1746,11 +1945,10 @@
     for (const pt of pendingWildImportPoints) {
       const inside = isInsideBoundary(pt.lat, pt.lng);
       const entry = {
-        species, note: pt.name, lat: pt.lat, lng: pt.lng, accuracy: null,
-        insideBoundary: inside, timestamp: pt.ts, photo: null
+        id: genId(), gebied_id: activeGebiedId, species, note: pt.name, lat: pt.lat, lng: pt.lng, accuracy: null,
+        insideBoundary: inside, timestamp: pt.ts, photo: null, updated_at: Date.now(), _dirty: true
       };
-      const id = await idbAdd('entries', entry);
-      entry.id = id;
+      await idbAdd('entries', entry);
       entries.push(entry);
       addEntryMarker(entry);
       count++;
@@ -1759,6 +1957,7 @@
     document.getElementById('importWildKmlArea').style.display = 'none';
     closeAllSheets();
     toast(count + ' wildregistraties geïmporteerd');
+    syncAllStores();
   });
 
   document.getElementById('btnImportBoundary').addEventListener('click', () => document.getElementById('fileImportBoundary').click());
@@ -2275,11 +2474,14 @@
     document.getElementById('trackBadge').classList.remove('show');
     if (trackLiveLayer) { map.removeLayer(trackLiveLayer); trackLiveLayer = null; }
     if (trackPoints.length >= 2) {
-      const track = { points: trackPoints, startTime: trackStartTime, endTime: Date.now(), distance: trackDistance };
-      const id = await idbAdd('tracks', track);
-      track.id = id;
+      const track = {
+        id: genId(), gebied_id: activeGebiedId, points: trackPoints, startTime: trackStartTime, endTime: Date.now(),
+        distance: trackDistance, updated_at: Date.now(), _dirty: true
+      };
+      await idbAdd('tracks', track);
       tracks.push(track);
       toast('Spoor bewaard: ' + (trackDistance/1000).toFixed(1).replace('.', ',') + ' km');
+      syncAllStores();
     } else {
       toast('Spoor te kort, niet bewaard');
     }
@@ -2293,7 +2495,10 @@
            d.toLocaleTimeString('nl-BE', { hour:'2-digit', minute:'2-digit' });
   }
 
-  async function loadTracks() { tracks = await idbGetAll('tracks'); }
+  async function loadTracks() {
+    const all = await idbGetAll('tracks');
+    tracks = all.filter(t => t.gebied_id === activeGebiedId);
+  }
   function renderTracksList() {
     const el = document.getElementById('tracksListEl');
     document.getElementById('tracksSubtitle').textContent = tracks.length + ' spoor/sporen bewaard';
@@ -2327,6 +2532,8 @@
         if (!(await appConfirm('Dit spoor verwijderen?'))) return;
         await idbDelete('tracks', tr.id);
         tracks = tracks.filter(t => t.id !== tr.id);
+        addPendingDelete('tracks', tr.id);
+        syncAllStores();
         renderTracksList();
       });
       el.appendChild(card);
@@ -2445,12 +2652,13 @@
   const filePhoto = document.getElementById('filePhoto');
   function resetPhotoUi() { photoDrop.className = 'photo-drop'; photoDrop.innerHTML = '📷 Foto toevoegen (camera of bestand)'; }
   photoDrop.addEventListener('click', () => filePhoto.click());
-  filePhoto.addEventListener('change', (e) => {
+  filePhoto.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    pendingPhotoBlob = file;
+    photoDrop.innerHTML = '📷 Foto wordt verkleind...';
+    pendingPhotoBlob = await compressImage(file);
     editingEntryPhotoCleared = false;
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(pendingPhotoBlob);
     photoDrop.className = 'photo-preview';
     photoDrop.innerHTML = '<img src="' + url + '"><button class="remove" type="button">✕</button>';
     photoDrop.querySelector('.remove').addEventListener('click', (ev) => {
@@ -2472,22 +2680,25 @@
       entry.accuracy = pendingCoords.accuracy; entry.insideBoundary = inside; entry.timestamp = timestamp;
       if (pendingPhotoBlob) entry.photo = pendingPhotoBlob;
       else if (editingEntryPhotoCleared) entry.photo = null;
+      entry.updated_at = Date.now(); entry._dirty = true;
       await idbPut('entries', entry);
       if (entryMarkers[entry.id]) { map.removeLayer(entryMarkers[entry.id]); delete entryMarkers[entry.id]; }
       addEntryMarker(entry);
       closeAllSheets();
       toast('Registratie bijgewerkt');
+      syncAllStores();
     } else {
       const entry = {
-        species, note, lat: pendingCoords.lat, lng: pendingCoords.lng, accuracy: pendingCoords.accuracy,
-        insideBoundary: inside, timestamp, photo: pendingPhotoBlob || null
+        id: genId(), gebied_id: activeGebiedId, species, note, lat: pendingCoords.lat, lng: pendingCoords.lng,
+        accuracy: pendingCoords.accuracy, insideBoundary: inside, timestamp, photo: pendingPhotoBlob || null,
+        updated_at: Date.now(), _dirty: true
       };
-      const id = await idbAdd('entries', entry);
-      entry.id = id;
+      await idbAdd('entries', entry);
       entries.push(entry);
       addEntryMarker(entry);
       closeAllSheets();
       toast('Registratie bewaard');
+      syncAllStores();
     }
   });
 
@@ -2497,6 +2708,8 @@
     await idbDelete('entries', editingEntryId);
     entries = entries.filter(en => en.id !== editingEntryId);
     if (entryMarkers[editingEntryId]) { map.removeLayer(entryMarkers[editingEntryId]); delete entryMarkers[editingEntryId]; }
+    addPendingDelete('entries', editingEntryId);
+    syncAllStores();
     closeAllSheets();
     toast('Registratie verwijderd');
   });
@@ -2563,14 +2776,16 @@
       const url = URL.createObjectURL(entry.photo);
       popupHtml = '<img src="' + url + '" style="width:160px;border-radius:8px;display:block;margin-bottom:6px;">' + popupHtml;
     }
-    popupHtml += '<br><button type="button" onclick="window.__openWildEdit(' + entry.id + ')" style="margin-top:6px;padding:6px 10px;border:none;border-radius:6px;background:' + col + ';color:#fff;font-weight:600;">✏️ Bewerken / verwijderen</button>';
+    popupHtml += '<br><button type="button" onclick="window.__openWildEdit(\'' + entry.id + '\')" style="margin-top:6px;padding:6px 10px;border:none;border-radius:6px;background:' + col + ';color:#fff;font-weight:600;">✏️ Bewerken / verwijderen</button>';
     marker.bindPopup(popupHtml);
     marker.on('dragend', async (ev) => {
       const ll = ev.target.getLatLng();
       entry.lat = ll.lat; entry.lng = ll.lng;
       entry.insideBoundary = isInsideBoundary(ll.lat, ll.lng);
+      entry.updated_at = Date.now(); entry._dirty = true;
       await idbPut('entries', entry);
       toast('Positie aangepast');
+      syncAllStores();
     });
     entryMarkers[entry.id] = marker;
     if (!entryVisibleUnderFilter(entry)) map.removeLayer(marker);
@@ -2581,7 +2796,13 @@
   };
   function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-  async function loadEntries() { entries = await idbGetAll('entries'); entries.forEach(addEntryMarker); }
+  async function loadEntries() {
+    Object.values(entryMarkers).forEach(m => map.removeLayer(m));
+    entryMarkers = {};
+    const all = await idbGetAll('entries');
+    entries = all.filter(e => e.gebied_id === activeGebiedId);
+    entries.forEach(addEntryMarker);
+  }
 
   /* ---------- Tableau (dagtelling kleinwild + jaaroverzicht) ---------- */
   const DEFAULT_TABLEAU_CATALOG = ['Haas','Konijn','Fazant','Patrijs','Wilde eend','Houtduif','Kraai','Ekster','Vlaamse gaai','Kauw','Vos'];
@@ -2641,7 +2862,10 @@
   }
   function currentSeasonLabel() { return seasonLabelForDate(Date.now()); }
 
-  async function loadTableaus() { tableaus = await idbGetAll('tableaus'); }
+  async function loadTableaus() {
+    const all = await idbGetAll('tableaus');
+    tableaus = all.filter(t => t.gebied_id === activeGebiedId);
+  }
 
   function buildTableauSpeciesRows(existingCounts) {
     const el = document.getElementById('tableauSpeciesRows');
@@ -2674,11 +2898,12 @@
   const tableauFilePhoto = document.getElementById('tableauFilePhoto');
   function resetTableauPhotoUi() { tableauPhotoDrop.className = 'photo-drop'; tableauPhotoDrop.innerHTML = '📷 Foto toevoegen (bv. groepsfoto van het tableau)'; }
   tableauPhotoDrop.addEventListener('click', () => tableauFilePhoto.click());
-  tableauFilePhoto.addEventListener('change', (e) => {
+  tableauFilePhoto.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    pendingTableauPhotoBlob = file;
-    const url = URL.createObjectURL(file);
+    tableauPhotoDrop.innerHTML = '📷 Foto wordt verkleind...';
+    pendingTableauPhotoBlob = await compressImage(file);
+    const url = URL.createObjectURL(pendingTableauPhotoBlob);
     tableauPhotoDrop.className = 'photo-preview';
     tableauPhotoDrop.innerHTML = '<img src="' + url + '"><button class="remove" type="button">✕</button>';
     tableauPhotoDrop.querySelector('.remove').addEventListener('click', (ev) => {
@@ -2732,19 +2957,25 @@
     if (Object.keys(counts).length === 0) { toast('Vul minstens één aantal in'); return; }
     const note = document.getElementById('tableauNote').value.trim();
     if (editingTableauId) {
-      const record = { id: editingTableauId, date: new Date(dateVal + 'T12:00:00').getTime(), counts, note, photo: pendingTableauPhotoBlob || null, timestamp: Date.now() };
+      const record = {
+        id: editingTableauId, gebied_id: activeGebiedId, date: new Date(dateVal + 'T12:00:00').getTime(), counts, note,
+        photo: pendingTableauPhotoBlob || null, timestamp: Date.now(), updated_at: Date.now(), _dirty: true
+      };
       await idbPut('tableaus', record);
       tableaus = tableaus.map(t => t.id === editingTableauId ? record : t);
       toast('Tableau bijgewerkt');
     } else {
-      const record = { date: new Date(dateVal + 'T12:00:00').getTime(), counts, note, photo: pendingTableauPhotoBlob || null, timestamp: Date.now() };
-      const id = await idbAdd('tableaus', record);
-      record.id = id;
+      const record = {
+        id: genId(), gebied_id: activeGebiedId, date: new Date(dateVal + 'T12:00:00').getTime(), counts, note,
+        photo: pendingTableauPhotoBlob || null, timestamp: Date.now(), updated_at: Date.now(), _dirty: true
+      };
+      await idbAdd('tableaus', record);
       tableaus.push(record);
       toast('Tableau bewaard');
     }
     closeAllSheets();
     renderTableau();
+    syncAllStores();
   });
 
   let tableauPeriod = 'current';
@@ -2824,6 +3055,8 @@
           if (!(await appConfirm('Dit tableau verwijderen?'))) return;
           await idbDelete('tableaus', t.id);
           tableaus = tableaus.filter(x => x.id !== t.id);
+          addPendingDelete('tableaus', t.id);
+          syncAllStores();
           renderTableau();
         });
         daysList.appendChild(card);
@@ -2874,6 +3107,8 @@
         await idbDelete('entries', entry.id);
         entries = entries.filter(en => en.id !== entry.id);
         if (entryMarkers[entry.id]) { map.removeLayer(entryMarkers[entry.id]); delete entryMarkers[entry.id]; }
+        addPendingDelete('entries', entry.id);
+        syncAllStores();
         renderWildList();
       });
       listEl.appendChild(card);
@@ -2961,14 +3196,15 @@
     if (!selectedMarkerType) { toast('Kies een type markering'); return; }
     const note = document.getElementById('markerNote').value.trim();
     const mrk = {
-      type: selectedMarkerType, note, lat: markerPendingCoords.lat, lng: markerPendingCoords.lng, timestamp: Date.now()
+      id: genId(), gebied_id: activeGebiedId, type: selectedMarkerType, note, lat: markerPendingCoords.lat,
+      lng: markerPendingCoords.lng, timestamp: Date.now(), updated_at: Date.now(), _dirty: true
     };
-    const id = await idbAdd('markers', mrk);
-    mrk.id = id;
+    await idbAdd('markers', mrk);
     markers.push(mrk);
     addMarkerMarker(mrk);
     closeAllSheets();
     toast('Markering bewaard');
+    syncAllStores();
   });
 
   function markerTypeInfo(key) { return allMarkerTypes().find(m => m.key === key) || MARKER_TYPES[MARKER_TYPES.length-1]; }
@@ -2986,7 +3222,13 @@
     markerMarkers[mrk.id] = marker;
   }
 
-  async function loadMarkers() { markers = await idbGetAll('markers'); markers.forEach(addMarkerMarker); }
+  async function loadMarkers() {
+    Object.values(markerMarkers).forEach(m => map.removeLayer(m));
+    markerMarkers = {};
+    const all = await idbGetAll('markers');
+    markers = all.filter(m => m.gebied_id === activeGebiedId);
+    markers.forEach(addMarkerMarker);
+  }
 
   function renderMarkersList() {
     const el = document.getElementById('markersListEl');
@@ -3021,6 +3263,8 @@
         await idbDelete('markers', mrk.id);
         markers = markers.filter(m => m.id !== mrk.id);
         if (markerMarkers[mrk.id]) { map.removeLayer(markerMarkers[mrk.id]); delete markerMarkers[mrk.id]; }
+        addPendingDelete('markers', mrk.id);
+        syncAllStores();
         renderMarkersList();
       });
       el.appendChild(card);
@@ -3128,16 +3372,11 @@
   }
 
   /* ---------- Export / import all data ---------- */
-  function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-  function base64ToBlob(dataUrl) { return fetch(dataUrl).then(r => r.blob()); }
-
+  document.getElementById('btnSyncNow').addEventListener('click', async () => {
+    if (!navigator.onLine) { toast('Geen internetverbinding'); return; }
+    await syncAllStores();
+    toast('Synchronisatie voltooid');
+  });
   document.getElementById('btnExport').addEventListener('click', async () => {
     toast('Bestand wordt voorbereid…');
     const exportEntries = [];
@@ -3190,33 +3429,43 @@
       } else if (payload.boundary) { boundaryLatLngs = payload.boundary; await saveBoundary(); renderBoundary(); }
       if (Array.isArray(payload.entries)) {
         for (const en of payload.entries) {
-          const photo = en.photoBase64 ? await base64ToBlob(en.photoBase64) : null;
-          const entry = { species: en.species, note: en.note, lat: en.lat, lng: en.lng, accuracy: en.accuracy, insideBoundary: en.insideBoundary, timestamp: en.timestamp, photo };
-          const id = await idbAdd('entries', entry);
-          entry.id = id; entries.push(entry); addEntryMarker(entry);
+          const photo = en.photoBase64 ? base64ToBlob(en.photoBase64) : null;
+          const entry = {
+            id: genId(), gebied_id: activeGebiedId, species: en.species, note: en.note, lat: en.lat, lng: en.lng,
+            accuracy: en.accuracy, insideBoundary: en.insideBoundary, timestamp: en.timestamp, photo,
+            updated_at: Date.now(), _dirty: true
+          };
+          await idbAdd('entries', entry);
+          entries.push(entry); addEntryMarker(entry);
         }
       }
       if (Array.isArray(payload.markers)) {
         for (const m of payload.markers) {
-          const id = await idbAdd('markers', m);
-          m.id = id; markers.push(m); addMarkerMarker(m);
+          const mrk = { id: genId(), gebied_id: activeGebiedId, type: m.type, note: m.note, lat: m.lat, lng: m.lng,
+            timestamp: m.timestamp, updated_at: Date.now(), _dirty: true };
+          await idbAdd('markers', mrk);
+          markers.push(mrk); addMarkerMarker(mrk);
         }
       }
       if (Array.isArray(payload.tracks)) {
         for (const t of payload.tracks) {
-          const id = await idbAdd('tracks', t);
-          t.id = id; tracks.push(t);
+          const track = { id: genId(), gebied_id: activeGebiedId, points: t.points, startTime: t.startTime,
+            endTime: t.endTime, distance: t.distance, updated_at: Date.now(), _dirty: true };
+          await idbAdd('tracks', track);
+          tracks.push(track);
         }
       }
       if (Array.isArray(payload.tableaus)) {
         for (const t of payload.tableaus) {
-          const photo = t.photoBase64 ? await base64ToBlob(t.photoBase64) : null;
-          const record = { date: t.date, counts: t.counts, note: t.note, timestamp: t.timestamp, photo };
-          const id = await idbAdd('tableaus', record);
-          record.id = id; tableaus.push(record);
+          const photo = t.photoBase64 ? base64ToBlob(t.photoBase64) : null;
+          const record = { id: genId(), gebied_id: activeGebiedId, date: t.date, counts: t.counts, note: t.note,
+            timestamp: t.timestamp, photo, updated_at: Date.now(), _dirty: true };
+          await idbAdd('tableaus', record);
+          tableaus.push(record);
         }
       }
       toast('Import voltooid');
+      syncAllStores();
     } catch (err) {
       toast('Kon bestand niet importeren: ' + err.message);
     }
@@ -3229,15 +3478,17 @@
     // Jachtgebieden zijn per groep opgeslagen in de cloud, dus dit deel moet
     // bij ELKE groepswissel opnieuw laden (niet enkel de allereerste keer).
     await loadBoundary();
-    if (appStarted) return;
-    appStarted = true;
-    // De rest (wildregistraties, markers, sporen, tableaus, eigen markertypes)
-    // staat momenteel nog lokaal op dit toestel en is nog niet per groep
-    // gescheiden — dat laden we dus maar één keer in.
+    await migrateLocalDataToCloud();
+    // Wildregistraties, markers, sporen en tableaus horen bij het actieve
+    // jachtgebied — dus ook opnieuw laden bij elke groeps-/gebiedswissel.
     await loadEntries();
     await loadMarkers();
     await loadTracks();
     await loadTableaus();
+    updateSyncStatusUi();
+    syncAllStores(); // draait op de achtergrond, blokkeert de UI niet
+    if (appStarted) return;
+    appStarted = true;
     await loadTableauSpeciesConfig();
     await loadCustomMarkerTypes();
     buildMarkerTypeGrid();
