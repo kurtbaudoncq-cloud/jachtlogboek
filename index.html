@@ -647,6 +647,11 @@
       <input type="text" id="speciesOther" placeholder="Andere soort (optioneel)">
     </div>
 
+    <div class="field" id="subtypeField" style="display:none;">
+      <label id="subtypeFieldLabel">Type</label>
+      <div class="chip-grid" id="subtypeGrid"></div>
+    </div>
+
     <div class="field photo-area">
       <label>Foto</label>
       <div id="photoDrop" class="photo-drop">📷 Foto toevoegen (camera of bestand)</div>
@@ -1125,10 +1130,12 @@
     entries: {
       table: 'wild_entries', hasPhoto: true, photoField: 'photo_base64',
       toRow: (e) => ({ id: String(e.id), gebied_id: e.gebied_id, species: e.species, note: e.note || null,
+        subtype: e.subtype || null,
         lat: e.lat, lng: e.lng, accuracy: (e.accuracy != null ? e.accuracy : null),
         inside_boundary: (e.insideBoundary != null ? e.insideBoundary : null), ts: e.timestamp,
         updated_at: e.updated_at, created_by: currentUser ? currentUser.id : null }),
       fromRow: (r) => ({ id: r.id, gebied_id: r.gebied_id, species: r.species, note: r.note || '',
+        subtype: r.subtype || null,
         lat: r.lat, lng: r.lng, accuracy: r.accuracy, insideBoundary: r.inside_boundary, timestamp: r.ts,
         updated_at: r.updated_at, _dirty: false }),
       addToMap: (rec) => addEntryMarker(rec),
@@ -1278,6 +1285,7 @@
   let pendingPhotoBlob = null;
   let pendingCoords = null;
   let selectedSpecies = null;
+  let selectedSubtype = null;
   let editingEntryId = null;
   let editingEntryPhotoCleared = false;
   let selectedMarkerType = null;
@@ -1290,7 +1298,7 @@
   let userMarker = null;
   let shownTrackLayer = null;
 
-  const SPECIES = ["Ree","Wild zwijn","Vos","Fazant","Haas","Konijn","Eend","Houtduif"];
+  const SPECIES = ["Ree","Hert","Wild zwijn","Vos","Fazant","Haas","Konijn","Eend","Houtduif"];
   const MARKER_TYPES = [
     { key:'hoogzit', label:'Hoogzit', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21 10 6M18 21 14 6M8.5 13h7M10 6h4"/></svg>' },
     { key:'voeder', label:'Voederplaats', svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M5 12c0 4.5 2.2 7 7 7s7-2.5 7-7"/><circle cx="9" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="7" r="1" fill="currentColor" stroke="none"/></svg>' },
@@ -2590,6 +2598,7 @@
         document.getElementById('speciesOther').value = '';
         [...speciesGrid.children].forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
+        updateSubtypeVisibility();
       });
       speciesGrid.appendChild(chip);
     });
@@ -2597,7 +2606,64 @@
   document.getElementById('speciesOther').addEventListener('input', () => {
     selectedSpecies = null;
     [...speciesGrid.children].forEach(c => c.classList.remove('active'));
+    updateSubtypeVisibility();
   });
+
+  // Geslacht/leeftijd-subtype (bok/geit/kits, hert/hinde/kalf, ...) — per soort een eigen set,
+  // enkel zichtbaar wanneer de gekozen soort een set heeft.
+  const SUBTYPE_OPTIONS = {
+    'Ree': [
+      { value:'bok',    chip:'🦌♂ Bok',    display:'Bok',     symbol:'♂' },
+      { value:'geit',   chip:'🦌♀ Geit',   display:'Geit',    symbol:'♀' },
+      { value:'kits_m', chip:'♂ Kits',     display:'Kits ♂',  symbol:'♂' },
+      { value:'kits_v', chip:'♀ Kits',     display:'Kits ♀',  symbol:'♀' }
+    ],
+    'Hert': [
+      { value:'hert',    chip:'🦌♂ Hert',  display:'Hert',    symbol:'♂' },
+      { value:'hinde',   chip:'🦌♀ Hinde', display:'Hinde',   symbol:'♀' },
+      { value:'kalf_m',  chip:'♂ Kalf',    display:'Kalf ♂',  symbol:'♂' },
+      { value:'kalf_v',  chip:'♀ Kalf',    display:'Kalf ♀',  symbol:'♀' }
+    ]
+  };
+  const SUBTYPE_INDEX = {};
+  Object.values(SUBTYPE_OPTIONS).forEach(list => list.forEach(o => { SUBTYPE_INDEX[o.value] = o; }));
+
+  function subtypeOptionsFor(species) { return SUBTYPE_OPTIONS[species] || null; }
+  function buildSubtypeGrid(opts) {
+    const grid = document.getElementById('subtypeGrid');
+    grid.innerHTML = '';
+    opts.forEach(o => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.setAttribute('data-subtype', o.value);
+      chip.textContent = o.chip;
+      chip.addEventListener('click', () => setSubtype(selectedSubtype === o.value ? null : o.value));
+      grid.appendChild(chip);
+    });
+  }
+  function updateSubtypeVisibility() {
+    const field = document.getElementById('subtypeField');
+    const opts = subtypeOptionsFor(selectedSpecies);
+    if (opts) {
+      document.getElementById('subtypeFieldLabel').textContent = 'Type ' + selectedSpecies.toLowerCase();
+      buildSubtypeGrid(opts);
+      field.style.display = '';
+    } else {
+      field.style.display = 'none';
+      selectedSubtype = null;
+    }
+  }
+  function setSubtype(value) {
+    selectedSubtype = value;
+    [...document.getElementById('subtypeGrid').children].forEach(c =>
+      c.classList.toggle('active', c.getAttribute('data-subtype') === value));
+  }
+  function subtypeDisplay(value) {
+    return SUBTYPE_INDEX[value] ? SUBTYPE_INDEX[value].display : '';
+  }
+  function subtypeSymbol(value) {
+    return SUBTYPE_INDEX[value] ? SUBTYPE_INDEX[value].symbol : '';
+  }
 
   function updateGpsUi(coords, coordsElId, accElId, badgeElId) {
     const coordsEl = document.getElementById(coordsElId);
@@ -2620,6 +2686,7 @@
   async function openWildSheet() {
     editingEntryId = null; editingEntryPhotoCleared = false;
     pendingCoords = null; pendingPhotoBlob = null; selectedSpecies = null;
+    selectedSubtype = null; updateSubtypeVisibility();
     document.getElementById('wildSheetTitle').textContent = 'Wild registreren';
     document.getElementById('wildSheetSubtitle').style.display = '';
     document.getElementById('wildSheetSubtitle').textContent = 'Positie wordt automatisch opgehaald, of kies zelf een plek voor historische invoer.';
@@ -2652,6 +2719,8 @@
     const matchChip = [...speciesGrid.children].find(c => c.textContent === entry.species);
     if (matchChip) { selectedSpecies = entry.species; matchChip.classList.add('active'); }
     else { document.getElementById('speciesOther').value = entry.species; }
+    updateSubtypeVisibility();
+    if (entry.subtype && subtypeOptionsFor(selectedSpecies)) setSubtype(entry.subtype);
     document.getElementById('wildNote').value = entry.note || '';
     document.getElementById('wildDate').value = new Date(entry.timestamp).toISOString().slice(0, 10);
     if (entry.photo) {
@@ -2713,11 +2782,13 @@
     const dateVal = document.getElementById('wildDate').value;
     const timestamp = dateVal ? new Date(dateVal + 'T12:00:00').getTime() : Date.now();
     const inside = isInsideBoundary(pendingCoords.lat, pendingCoords.lng);
+    const subtype = (subtypeOptionsFor(species) ? selectedSubtype : null);
     if (editingEntryId) {
       const entry = entries.find(en => en.id === editingEntryId);
       if (!entry) { closeAllSheets(); return; }
       entry.species = species; entry.note = note; entry.lat = pendingCoords.lat; entry.lng = pendingCoords.lng;
       entry.accuracy = pendingCoords.accuracy; entry.insideBoundary = inside; entry.timestamp = timestamp;
+      entry.subtype = subtype;
       if (pendingPhotoBlob) entry.photo = pendingPhotoBlob;
       else if (editingEntryPhotoCleared) entry.photo = null;
       entry.updated_at = Date.now(); entry._dirty = true;
@@ -2729,7 +2800,7 @@
       syncAllStores();
     } else {
       const entry = {
-        id: genId(), gebied_id: activeGebiedId, species, note, lat: pendingCoords.lat, lng: pendingCoords.lng,
+        id: genId(), gebied_id: activeGebiedId, species, note, subtype, lat: pendingCoords.lat, lng: pendingCoords.lng,
         accuracy: pendingCoords.accuracy, insideBoundary: inside, timestamp, photo: pendingPhotoBlob || null,
         updated_at: Date.now(), _dirty: true
       };
@@ -2755,7 +2826,7 @@
   });
 
   function speciesEmoji(sp) {
-    const m = { 'Ree':'🦌','Wild zwijn':'🐗','Vos':'🦊','Fazant':'🐦','Haas':'🐇','Konijn':'🐇','Eend':'🦆','Houtduif':'🐦' };
+    const m = { 'Ree':'🦌','Hert':'🦌','Wild zwijn':'🐗','Vos':'🦊','Fazant':'🐦','Haas':'🐇','Konijn':'🐇','Eend':'🦆','Houtduif':'🐦' };
     if (m[sp]) return m[sp];
     const trimmed = String(sp || '').trim();
     const key = Object.keys(m).find(k => k.toLowerCase() === trimmed.toLowerCase());
@@ -2808,12 +2879,17 @@
   }
   function addEntryMarker(entry) {
     const col = yearColor(entryYear(entry));
+    const subtypeSym = entry.subtype ? subtypeSymbol(entry.subtype) : '';
+    const badgeHtml = subtypeSym
+      ? '<span style="position:absolute;bottom:-3px;right:-3px;background:#fff;color:' + col + ';border:1.5px solid ' + col + ';border-radius:50%;width:14px;height:14px;font-size:10px;font-weight:700;line-height:13px;text-align:center;transform:rotate(45deg);">' + subtypeSym + '</span>'
+      : '';
     const icon = L.divIcon({
-      html: '<div style="background:' + col + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px;">' + speciesEmoji(entry.species) + '</span></div>',
+      html: '<div style="position:relative;background:' + col + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px;">' + speciesEmoji(entry.species) + '</span>' + badgeHtml + '</div>',
       className:'', iconSize:[30,30], iconAnchor:[15,28]
     });
     const marker = L.marker([entry.lat, entry.lng], { icon, draggable: false }).addTo(map);
-    let popupHtml = '<strong>' + entry.species + '</strong><br>' + fmtDateShort(entry.timestamp);
+    const subtypeLabelStr = entry.subtype ? ' · ' + subtypeDisplay(entry.subtype) : '';
+    let popupHtml = '<strong>' + entry.species + subtypeLabelStr + '</strong><br>' + fmtDateShort(entry.timestamp);
     if (entry.note) popupHtml += '<br><em>' + escapeHtml(entry.note) + '</em>';
     if (entry.photo) {
       const url = URL.createObjectURL(entry.photo);
@@ -3219,9 +3295,10 @@
       const thumbHtml = entry.photo
         ? '<img class="thumb" src="' + URL.createObjectURL(entry.photo) + '">'
         : '<div class="thumb" style="background:' + yearColor(entryYear(entry)) + ';color:#fff;">' + speciesEmoji(entry.species) + '</div>';
+      const subtypeTag = entry.subtype ? ' <span style="font-weight:500;color:var(--ink-soft);">· ' + subtypeDisplay(entry.subtype) + '</span>' : '';
       card.innerHTML = thumbHtml +
         '<div class="info">' +
-          '<div class="top"><span class="title">' + entry.species + '</span></div>' +
+          '<div class="top"><span class="title">' + entry.species + subtypeTag + '</span></div>' +
           '<div class="meta">' + fmtDateShort(entry.timestamp) + ' · ' + entry.lat.toFixed(4) + ', ' + entry.lng.toFixed(4) + '</div>' +
           (entry.note ? '<div class="note">' + escapeHtml(entry.note) + '</div>' : '') +
         '</div>' +
