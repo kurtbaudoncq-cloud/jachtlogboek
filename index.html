@@ -538,7 +538,7 @@
       <button class="menu-item" data-open="tracks"><span class="emoji">🥾</span><span class="col">Sporen<div class="sub">Bewaarde looproutes</div></span></button>
       <button class="menu-item" data-open="weather"><span class="emoji">☀️</span><span class="col">Weer &amp; zon/maan<div class="sub">Beste momenten om te jagen</div></span></button>
       <button class="menu-item" data-open="boundary"><span class="emoji">📐</span><span class="col">Jachtgebied grens<div class="sub">Tekenen of importeren</div></span></button>
-      <button class="menu-item" data-open="tableau"><span class="emoji">📊</span><span class="col">Tableau<div class="sub">Aantallen per soort</div></span></button>
+      <button class="menu-item" data-open="tableau"><span class="emoji">📊</span><span class="col">Afschot / Tableau<div class="sub">Aantallen per soort</div></span></button>
       <button class="menu-item" data-open="data"><span class="emoji">⇅</span><span class="col">Data<div class="sub">Back-up maken of terugzetten</div></span></button>
       <button class="menu-item" id="btnAccountInfo"><span class="emoji">👤</span><span class="col" id="accountInfoLabel">Jachtgebied<div class="sub" id="accountInfoSub">—</div></span></button>
     </div>
@@ -787,10 +787,10 @@
   <div class="sheet" id="sheetTableau">
     <div class="sheet-handle"></div>
     <div class="back-row" style="justify-content:space-between;"><button class="icon-btn" data-back>←</button><button class="icon-btn sheet-close-x">✕</button></div>
-    <h2>Tableau</h2>
+    <h2>Afschot / Tableau</h2>
     <div class="subtitle" id="tableauSubtitle">Aantallen per soort</div>
     <div class="btn-row" style="margin-bottom:14px;">
-      <button class="btn btn-primary" id="btnAddTableau">➕ Tableau invullen (jachtdag)</button>
+      <button class="btn btn-primary" id="btnAddTableau">➕ Afschot / Tableau invullen (jachtdag)</button>
     </div>
     <button class="btn btn-outline" id="btnEditTableauSpecies" style="margin-bottom:14px;">⚙️ Soorten voor jouw jachtplan aanpassen</button>
     <div class="toggle-row" id="tableauPeriodChips">
@@ -810,7 +810,7 @@
   <!-- Tableau species config sheet -->
   <div class="sheet" id="sheetTableauSpecies">
     <div class="sheet-handle"></div>
-    <h2>Soorten voor tableau</h2>
+    <h2>Soorten voor afschot / tableau</h2>
     <div class="subtitle">Kies welke soorten in jouw jachtplan zitten — enkel die verschijnen in het invulformulier.</div>
     <div class="chip-grid" id="tableauSpeciesConfigGrid" style="grid-template-columns:repeat(2,1fr);"></div>
     <div class="field">
@@ -829,7 +829,7 @@
   <!-- Tableau add-entry sheet -->
   <div class="sheet" id="sheetTableauAdd">
     <div class="sheet-handle"></div>
-    <h2>Tableau invullen</h2>
+    <h2>Afschot / Tableau invullen</h2>
     <div class="subtitle">Aantallen kleinwild van de jachtdag</div>
     <div class="field">
       <label>Datum</label>
@@ -3091,7 +3091,7 @@
     } else {
       resetTableauPhotoUi();
     }
-    document.querySelector('#sheetTableauAdd h2').textContent = existingRecord ? 'Tableau aanpassen' : 'Tableau invullen';
+    document.querySelector('#sheetTableauAdd h2').textContent = existingRecord ? 'Afschot / Tableau aanpassen' : 'Afschot / Tableau invullen';
     openSheet('addtableau');
   }
   document.getElementById('btnAddTableau').addEventListener('click', () => openTableauAddSheet(null));
@@ -3114,7 +3114,7 @@
       };
       await idbPut('tableaus', record);
       tableaus = tableaus.map(t => t.id === editingTableauId ? record : t);
-      toast('Tableau bijgewerkt');
+      toast('Afschot / Tableau bijgewerkt');
     } else {
       const record = {
         id: genId(), gebied_id: activeGebiedId, date: new Date(dateVal + 'T12:00:00').getTime(), counts, note,
@@ -3122,7 +3122,7 @@
       };
       await idbAdd('tableaus', record);
       tableaus.push(record);
-      toast('Tableau bewaard');
+      toast('Afschot / Tableau bewaard');
     }
     closeAllSheets();
     renderTableau();
@@ -3205,7 +3205,7 @@
           '<div class="list-actions"><button data-act="edit" title="Bewerk">✏️</button><button data-act="del" title="Verwijder">🗑️</button></div>';
         card.querySelector('[data-act=edit]').addEventListener('click', () => openTableauAddSheet(t));
         card.querySelector('[data-act=del]').addEventListener('click', async () => {
-          if (!(await appConfirm('Dit tableau verwijderen?'))) return;
+          if (!(await appConfirm('Dit afschot / tableau verwijderen?'))) return;
           await idbDelete('tableaus', t.id);
           tableaus = tableaus.filter(x => x.id !== t.id);
           addPendingDelete('tableaus', t.id);
