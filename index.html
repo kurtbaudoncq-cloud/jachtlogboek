@@ -525,6 +525,7 @@
   <!-- MAIN MENU -->
   <div class="sheet" id="sheetMenu">
     <div class="sheet-handle"></div>
+    <div class="back-row" style="justify-content:flex-end;"><button class="icon-btn sheet-close-x">✕</button></div>
     <h2>Menu</h2>
     <div class="subtitle">Alles op een rijtje</div>
     <div class="quick-actions">
@@ -546,7 +547,7 @@
   <!-- Boundary sheet -->
   <div class="sheet" id="sheetBoundary">
     <div class="sheet-handle"></div>
-    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <div class="back-row" style="justify-content:space-between;"><button class="icon-btn" data-back>←</button><button class="icon-btn sheet-close-x">✕</button></div>
     <h2>Jachtgebied grens</h2>
     <div class="subtitle">Teken de grens zelf, of importeer een bestaand plan.</div>
     <div class="field" id="gebiedSelectField" style="display:none;">
@@ -669,7 +670,7 @@
   <!-- Wild list -->
   <div class="sheet" id="sheetWildList">
     <div class="sheet-handle"></div>
-    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <div class="back-row" style="justify-content:space-between;"><button class="icon-btn" data-back>←</button><button class="icon-btn sheet-close-x">✕</button></div>
     <h2>Wildregistraties</h2>
     <div class="subtitle" id="wildListSubtitle">0 registraties</div>
     <div class="toggle-row" id="wildYearFilterChips" style="flex-wrap:wrap; margin-bottom:10px;"></div>
@@ -719,7 +720,7 @@
   <!-- Markers list -->
   <div class="sheet" id="sheetMarkersList">
     <div class="sheet-handle"></div>
-    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <div class="back-row" style="justify-content:space-between;"><button class="icon-btn" data-back>←</button><button class="icon-btn sheet-close-x">✕</button></div>
     <h2>Markeringen</h2>
     <div class="subtitle" id="markersListSubtitle">0 markeringen</div>
     <div id="markersListEl"></div>
@@ -728,7 +729,7 @@
   <!-- Tracks list -->
   <div class="sheet" id="sheetTracks">
     <div class="sheet-handle"></div>
-    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <div class="back-row" style="justify-content:space-between;"><button class="icon-btn" data-back>←</button><button class="icon-btn sheet-close-x">✕</button></div>
     <h2>Sporen</h2>
     <div class="subtitle" id="tracksSubtitle">0 sporen bewaard</div>
     <div class="hint" style="margin-bottom:14px;">Start een nieuw spoor met de ⏺ knop bovenaan het scherm.</div>
@@ -738,7 +739,7 @@
   <!-- Weather / sun-moon sheet -->
   <div class="sheet" id="sheetWeather">
     <div class="sheet-handle"></div>
-    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <div class="back-row" style="justify-content:space-between;"><button class="icon-btn" data-back>←</button><button class="icon-btn sheet-close-x">✕</button></div>
     <h2>Weer &amp; zon/maan</h2>
     <div class="subtitle" id="weatherLocLabel">Op basis van je huidige locatie</div>
     <div id="weatherContent"><div class="hint">Gegevens ophalen…</div></div>
@@ -747,7 +748,7 @@
   <!-- Data sheet -->
   <div class="sheet" id="sheetData">
     <div class="sheet-handle"></div>
-    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <div class="back-row" style="justify-content:space-between;"><button class="icon-btn" data-back>←</button><button class="icon-btn sheet-close-x">✕</button></div>
     <h2>Data</h2>
     <div class="subtitle">Wordt automatisch bewaard in de cloud (ook zonder bereik: dan synct het zodra je weer internet hebt).</div>
     <div class="field" style="background:#f4f1ea;border-radius:10px;padding:10px 12px;margin-bottom:14px;">
@@ -780,7 +781,7 @@
   <!-- Tableau overview sheet -->
   <div class="sheet" id="sheetTableau">
     <div class="sheet-handle"></div>
-    <div class="back-row"><button class="icon-btn" data-back>←</button></div>
+    <div class="back-row" style="justify-content:space-between;"><button class="icon-btn" data-back>←</button><button class="icon-btn sheet-close-x">✕</button></div>
     <h2>Tableau</h2>
     <div class="subtitle" id="tableauSubtitle">Aantallen per soort</div>
     <div class="btn-row" style="margin-bottom:14px;">
@@ -1407,6 +1408,9 @@
   });
   document.querySelectorAll('[data-back]').forEach(btn => {
     btn.addEventListener('click', () => openSheet('menu'));
+  });
+  document.querySelectorAll('.sheet-close-x').forEach(btn => {
+    btn.addEventListener('click', () => { closeAllSheets(); cancelDrawing(); });
   });
 
   /* ---------- Point in polygon (ray casting), supports multiple rings ---------- */
