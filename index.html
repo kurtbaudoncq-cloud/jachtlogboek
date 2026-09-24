@@ -1127,14 +1127,18 @@
         updated_at: e.updated_at, created_by: currentUser ? currentUser.id : null }),
       fromRow: (r) => ({ id: r.id, gebied_id: r.gebied_id, species: r.species, note: r.note || '',
         lat: r.lat, lng: r.lng, accuracy: r.accuracy, insideBoundary: r.inside_boundary, timestamp: r.ts,
-        updated_at: r.updated_at, _dirty: false })
+        updated_at: r.updated_at, _dirty: false }),
+      addToMap: (rec) => addEntryMarker(rec),
+      removeFromMap: (rec) => { if (entryMarkers[rec.id]) { map.removeLayer(entryMarkers[rec.id]); delete entryMarkers[rec.id]; } }
     },
     markers: {
       table: 'markers', hasPhoto: false,
       toRow: (m) => ({ id: String(m.id), gebied_id: m.gebied_id, type: m.type, note: m.note || null,
         lat: m.lat, lng: m.lng, ts: m.timestamp, updated_at: m.updated_at, created_by: currentUser ? currentUser.id : null }),
       fromRow: (r) => ({ id: r.id, gebied_id: r.gebied_id, type: r.type, note: r.note || '',
-        lat: r.lat, lng: r.lng, timestamp: r.ts, updated_at: r.updated_at, _dirty: false })
+        lat: r.lat, lng: r.lng, timestamp: r.ts, updated_at: r.updated_at, _dirty: false }),
+      addToMap: (rec) => addMarkerMarker(rec),
+      removeFromMap: (rec) => { if (markerMarkers[rec.id]) { map.removeLayer(markerMarkers[rec.id]); delete markerMarkers[rec.id]; } }
     },
     tracks: {
       table: 'tracks', hasPhoto: false,
@@ -1185,7 +1189,13 @@
         else rec.photo = null;
       }
       await idbPut(storeName, rec);
-      if (local) Object.assign(local, rec); else arr.push(rec);
+      let finalRec;
+      if (local) { Object.assign(local, rec); finalRec = local; } else { arr.push(rec); finalRec = rec; }
+      // Kaartlaag (marker) meteen bijwerken — anders zie je nieuwe/aangepaste data pas na een volledige herlaad.
+      if (cfg.addToMap) {
+        if (cfg.removeFromMap) cfg.removeFromMap(finalRec);
+        cfg.addToMap(finalRec);
+      }
     }
     const remoteIds = new Set(data.map(r => r.id));
     const pendingDelIds = new Set(getPendingDeletes(storeName));
@@ -1193,6 +1203,7 @@
       const r = arr[i];
       if (r.gebied_id === activeGebiedId && !r._dirty && !pendingDelIds.has(r.id) && !remoteIds.has(r.id)) {
         arr.splice(i, 1);
+        if (cfg.removeFromMap) cfg.removeFromMap(r);
         await idbDelete(storeName, r.id);
       }
     }
