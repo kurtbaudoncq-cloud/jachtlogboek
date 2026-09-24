@@ -407,16 +407,16 @@
     </div>
 
     <div id="authStepGroups" style="display:none;">
-      <h2 style="margin-bottom:4px;">Kies je groep</h2>
-      <div class="hint" style="color:var(--parchment-dim);margin-bottom:12px;">Een groep deelt jachtgebieden met alle leden.</div>
+      <h2 style="margin-bottom:4px;">Kies je jachtgebied</h2>
+      <div class="hint" style="color:var(--parchment-dim);margin-bottom:12px;">Elk jachtgebied heeft zijn eigen jachtmaats. Kies hieronder in welk jachtgebied je nu wil werken.</div>
       <div id="authGroupsList"></div>
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.15);">
-        <div class="field"><label style="color:var(--parchment-dim);">Nieuwe groep aanmaken</label><input type="text" id="newGroupName" placeholder="Bv. Jachtgroep Dinnet"></div>
-        <button class="btn btn-secondary" id="btnCreateGroup">➕ Groep aanmaken</button>
+        <div class="field"><label style="color:var(--parchment-dim);">Nieuw jachtgebied aanmaken</label><input type="text" id="newGroupName" placeholder="Bv. Dinnet"></div>
+        <button class="btn btn-secondary" id="btnCreateGroup">➕ Jachtgebied aanmaken</button>
       </div>
       <div style="margin-top:14px;">
-        <div class="field"><label style="color:var(--parchment-dim);">Lid worden via uitnodigingscode</label><input type="text" id="joinGroupCode" placeholder="Bv. a1b2c3d4"></div>
-        <button class="btn btn-secondary" id="btnJoinGroup">🔑 Lid worden</button>
+        <div class="field"><label style="color:var(--parchment-dim);">Toegang vragen met uitnodigingscode</label><input type="text" id="joinGroupCode" placeholder="Bv. a1b2c3d4"></div>
+        <button class="btn btn-secondary" id="btnJoinGroup">🔑 Toegang vragen</button>
       </div>
       <div style="text-align:center;margin-top:18px;"><a href="#" id="linkSignOut" style="color:var(--parchment-dim);font-size:13px;">Uitloggen</a></div>
     </div>
@@ -527,7 +527,7 @@
       <button class="menu-item" data-open="boundary"><span class="emoji">📐</span><span class="col">Jachtgebied grens<div class="sub">Tekenen of importeren</div></span></button>
       <button class="menu-item" data-open="tableau"><span class="emoji">📊</span><span class="col">Tableau<div class="sub">Aantallen per soort</div></span></button>
       <button class="menu-item" data-open="data"><span class="emoji">⇅</span><span class="col">Data<div class="sub">Back-up maken of terugzetten</div></span></button>
-      <button class="menu-item" id="btnAccountInfo"><span class="emoji">👤</span><span class="col" id="accountInfoLabel">Groep<div class="sub" id="accountInfoSub">—</div></span></button>
+      <button class="menu-item" id="btnAccountInfo"><span class="emoji">👤</span><span class="col" id="accountInfoLabel">Jachtgebied<div class="sub" id="accountInfoSub">—</div></span></button>
     </div>
   </div>
 
@@ -537,14 +537,15 @@
     <div class="back-row"><button class="icon-btn" data-back>←</button></div>
     <h2>Jachtgebied grens</h2>
     <div class="subtitle">Teken de grens zelf, of importeer een bestaand plan.</div>
-    <div class="field">
-      <label>Actief jachtgebied</label>
+    <div class="field" id="gebiedSelectField" style="display:none;">
+      <label>Actief jachtgebied (geavanceerd — meerdere in 1 groep)</label>
       <select id="gebiedSelect"></select>
     </div>
     <div class="btn-row" style="margin-bottom:10px;">
-      <button class="btn btn-outline" id="btnNewGebied">➕ Nieuw</button>
+      <button class="btn btn-outline" id="btnNewGebied" style="display:none;">➕ Nieuw</button>
       <button class="btn btn-outline" id="btnRenameGebied">✏️ Naam wijzigen</button>
     </div>
+    <button class="btn btn-danger" id="btnDeleteGebied" style="margin-bottom:10px; display:none;">🗑️ Dit jachtgebied volledig verwijderen (uit de groep)</button>
     <div class="field" id="gebiedNameEditArea" style="display:none;">
       <input type="text" id="gebiedNameInput" placeholder="Naam van het jachtgebied">
       <div class="btn-row" style="margin-top:8px;">
@@ -886,7 +887,7 @@
   function renderGroupsList(data) {
     const listEl = document.getElementById('authGroupsList');
     if (!data || data.length === 0) {
-      listEl.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Nog geen groepen.</div>';
+      listEl.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Nog geen jachtgebieden.</div>';
       return;
     }
     listEl.innerHTML = data.map(row =>
@@ -904,19 +905,20 @@
   // autoEnter=false (via het account-menu): toon altijd de volledige lijst, ook bij 1 groep.
   async function loadMyGroups(autoEnter) {
     if (autoEnter === undefined) autoEnter = true;
-    authMsg('Groepen laden…');
+    authMsg('Jachtgebieden laden…');
     const { data, error } = await sb
       .from('group_members')
       .select('role, groups ( id, name, invite_code )')
       .eq('user_id', currentUser.id);
-    if (error) { authMsg('Kon groepen niet laden: ' + error.message); return; }
+    if (error) { authMsg('Kon jachtgebieden niet laden: ' + error.message); return; }
 
     if (autoEnter && (!data || data.length === 0)) {
       authMsg('Jouw omgeving klaarzetten…');
       const base = (currentUser.user_metadata && currentUser.user_metadata.display_name) || (currentUser.email || 'Mijn').split('@')[0];
-      const { data: gid, error: gerr } = await sb.rpc('create_group', { gname: base + ' jachtgroep' });
-      if (gerr) { authMsg('Kon groep niet aanmaken: ' + gerr.message); renderGroupsList([]); showAuthStep('Groups'); return; }
-      enterGroup(gid, base + ' jachtgroep', 'admin');
+      const gname = base + '\'s jachtgebied';
+      const { data: gid, error: gerr } = await sb.rpc('create_group', { gname });
+      if (gerr) { authMsg('Kon jachtgebied niet aanmaken: ' + gerr.message); renderGroupsList([]); showAuthStep('Groups'); return; }
+      enterGroup(gid, gname, 'admin');
       return;
     }
     if (autoEnter && data && data.length === 1) {
@@ -931,7 +933,7 @@
   document.getElementById('btnCreateGroup').addEventListener('click', async () => {
     const name = document.getElementById('newGroupName').value.trim();
     if (!name) { authMsg('Vul een naam in'); return; }
-    authMsg('Groep aanmaken…');
+    authMsg('Jachtgebied aanmaken…');
     const { data, error } = await sb.rpc('create_group', { gname: name });
     if (error) { authMsg(error.message); return; }
     enterGroup(data, name, 'admin');
@@ -940,11 +942,11 @@
   document.getElementById('btnJoinGroup').addEventListener('click', async () => {
     const code = document.getElementById('joinGroupCode').value.trim();
     if (!code) { authMsg('Vul een code in'); return; }
-    authMsg('Groep zoeken…');
+    authMsg('Jachtgebied zoeken…');
     const { data, error } = await sb.rpc('join_group_by_code', { code });
     if (error) { authMsg(error.message); return; }
     const { data: g } = await sb.from('groups').select('name').eq('id', data).single();
-    enterGroup(data, g ? g.name : 'Groep', 'lid');
+    enterGroup(data, g ? g.name : 'Jachtgebied', 'lid');
   });
 
   async function enterGroup(groupId, groupName, role) {
@@ -958,11 +960,12 @@
     await startApp();
   }
 
-  document.getElementById('btnAccountInfo').addEventListener('click', async () => {
-    if (!(await appConfirm('Groep wisselen, een nieuwe groep aanmaken, lid worden van een andere groep, of uitloggen?'))) return;
+  async function openGroupSwitcher() {
+    if (!(await appConfirm('Jachtgebied wisselen, een nieuw jachtgebied aanmaken, toegang vragen tot een ander jachtgebied, of uitloggen?'))) return;
     document.getElementById('authOverlay').style.display = 'flex';
     await loadMyGroups(false);
-  });
+  }
+  document.getElementById('btnAccountInfo').addEventListener('click', openGroupSwitcher);
 
   /* ---------- IndexedDB helper ---------- */
   const DB_NAME = "jachtlogboek";
@@ -1282,9 +1285,12 @@
 
   function renderGebiedSelect() {
     document.getElementById('gebiedNameEditArea').style.display = 'none';
+    const multi = jachtgebieden.length > 1; // normaal 1 jachtgebied per groep; alleen legacy-gevallen hebben er meer
     const sel = document.getElementById('gebiedSelect');
     sel.innerHTML = jachtgebieden.map(g => '<option value="' + g.id + '"' + (g.id === activeGebiedId ? ' selected' : '') + '>' +
       escapeHtml(g.name) + (g.locked ? ' 🔒' : '') + '</option>').join('');
+    document.getElementById('gebiedSelectField').style.display = multi ? '' : 'none';
+    document.getElementById('btnNewGebied').style.display = multi ? '' : 'none';
     const lockBtn = document.getElementById('btnToggleLock');
     const locked = isGebiedLocked();
     lockBtn.textContent = locked ? '🔓 Ontgrendelen' : '🔒 Vergrendelen';
@@ -1294,9 +1300,13 @@
       if (id === 'btnToggleOfficial') return; // viewing Geopunt is always allowed
       el.style.opacity = locked ? '0.5' : '1';
     });
+    // "Verplaats" en "Verwijder" zijn opruimtools voor het (legacy) geval dat een
+    // groep per ongeluk meer dan 1 jachtgebied bevat — normaal is dit 1-op-1.
     const moveBtn = document.getElementById('btnMoveGebied');
-    if (moveBtn) moveBtn.style.display = (currentGroupRole === 'admin') ? '' : 'none';
+    if (moveBtn) moveBtn.style.display = (currentGroupRole === 'admin' && multi) ? '' : 'none';
     document.getElementById('moveGebiedArea').style.display = 'none';
+    const deleteBtn = document.getElementById('btnDeleteGebied');
+    if (deleteBtn) deleteBtn.style.display = (currentGroupRole === 'admin' && multi) ? '' : 'none';
     renderGebiedQuickSwitch();
   }
   function renderGebiedQuickSwitch() {
@@ -1322,11 +1332,17 @@
       });
     });
   }
-  document.getElementById('gebiedNameDisplay').addEventListener('click', () => {
-    const panel = document.getElementById('gebiedQuickSwitch');
-    const isHidden = window.getComputedStyle(panel).display === 'none';
-    panel.style.display = isHidden ? 'block' : 'none';
-    toast(isHidden ? 'Lijst geopend' : 'Lijst gesloten');
+  document.getElementById('gebiedNameDisplay').addEventListener('click', async () => {
+    if (jachtgebieden.length > 1) {
+      // Legacy-geval: deze groep bevat toch meerdere jachtgebieden — toon het wisselpaneel.
+      const panel = document.getElementById('gebiedQuickSwitch');
+      const isHidden = window.getComputedStyle(panel).display === 'none';
+      panel.style.display = isHidden ? 'block' : 'none';
+      toast(isHidden ? 'Lijst geopend' : 'Lijst gesloten');
+      return;
+    }
+    // Normale situatie: 1 jachtgebied = 1 groep, dus "wissel van jachtgebied" = "wissel van groep".
+    await openGroupSwitcher();
   });
   document.getElementById('btnQuickManageGebieden').addEventListener('click', () => {
     document.getElementById('gebiedQuickSwitch').style.display = 'none';
@@ -1374,6 +1390,15 @@
       if (g) {
         g.name = name;
         await saveGebieden();
+        // 1 jachtgebied = 1 groep: bij een enkel jachtgebied houden we de groepsnaam gelijk.
+        if (jachtgebieden.length === 1 && currentGroupId) {
+          const { error: gerr } = await sb.from('groups').update({ name }).eq('id', currentGroupId);
+          if (!gerr) {
+            currentGroupName = name;
+            const lbl = document.getElementById('accountInfoSub');
+            if (lbl) lbl.textContent = name + ' (' + (currentGroupRole === 'admin' ? 'admin' : 'lid') + ') · ' + (currentUser ? currentUser.email : '');
+          }
+        }
         renderGebiedSelect();
         renderBoundary();
         toast('Naam gewijzigd naar "' + g.name + '"');
@@ -1432,6 +1457,22 @@
     await loadBoundary(); // herlaadt de lijst voor de huidige groep (gebied is nu weg)
   });
 
+  document.getElementById('btnDeleteGebied').addEventListener('click', async () => {
+    const g = getActiveGebied();
+    if (!g) return;
+    if (jachtgebieden.length <= 1) { toast('Dit is het enige jachtgebied in deze groep — kan niet verwijderd worden'); return; }
+    const zoneCount = (g.zones || []).length;
+    const warn = zoneCount > 0
+      ? '"' + g.name + '" (met ' + zoneCount + ' zone(s)) volledig verwijderen uit deze groep? Dit kan niet ongedaan gemaakt worden.'
+      : '"' + g.name + '" (leeg jachtgebied) verwijderen uit deze groep?';
+    if (!(await appConfirm(warn))) return;
+    const { error } = await sb.from('jachtgebieden').delete().eq('id', g.id);
+    if (error) { toast('Kon niet verwijderen: ' + error.message); return; }
+    localStorage.removeItem('jlb_activeGebiedId_' + currentGroupId);
+    toast('"' + g.name + '" verwijderd');
+    await loadBoundary();
+  });
+
   async function loadBoundary() {
     if (!currentGroupId) return;
     const { data, error } = await sb.from('jachtgebieden').select('*').eq('group_id', currentGroupId).order('created_at');
@@ -1439,7 +1480,7 @@
     else jachtgebieden = (data || []).map(r => ({ id: r.id, name: r.name, locked: !!r.locked, zones: r.zones || null }));
 
     if (jachtgebieden.length === 0) {
-      const g = { id: genGebiedId(), name: 'Jachtgebied 1', zones: null, locked: false };
+      const g = { id: genGebiedId(), name: currentGroupName || 'Jachtgebied 1', zones: null, locked: false };
       jachtgebieden = [g];
       activeGebiedId = g.id;
       await saveGebieden(); // insert de eerste rij
