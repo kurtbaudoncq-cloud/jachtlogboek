@@ -660,6 +660,8 @@
     <div class="back-row"><button class="icon-btn" data-back>←</button></div>
     <h2>Wildregistraties</h2>
     <div class="subtitle" id="wildListSubtitle">0 registraties</div>
+    <div class="toggle-row" id="wildYearFilterChips" style="flex-wrap:wrap; margin-bottom:10px;"></div>
+    <div class="hint" style="margin-bottom:10px;">Dit filter bepaalt ook welk wild op de kaart getoond wordt.</div>
     <div id="wildListEl"></div>
   </div>
 
@@ -2504,6 +2506,42 @@
     return m[sp] || '📍';
   }
 
+  /* ---------- Wild filteren per jaar (lijst + wat er op de kaart staat) ---------- */
+  function getWildYearFilter() { return localStorage.getItem('jlb_wildYearFilter') || 'all'; }
+  function setWildYearFilter(v) { localStorage.setItem('jlb_wildYearFilter', v); }
+  function entryYear(entry) { return new Date(entry.timestamp).getFullYear(); }
+  function entryVisibleUnderFilter(entry) {
+    const f = getWildYearFilter();
+    return f === 'all' || entryYear(entry) === parseInt(f, 10);
+  }
+  function applyWildMapFilter() {
+    entries.forEach(entry => {
+      const marker = entryMarkers[entry.id];
+      if (!marker) return;
+      const visible = entryVisibleUnderFilter(entry);
+      if (visible && !map.hasLayer(marker)) marker.addTo(map);
+      else if (!visible && map.hasLayer(marker)) map.removeLayer(marker);
+    });
+  }
+  function renderWildYearFilterChips() {
+    const wrap = document.getElementById('wildYearFilterChips');
+    if (!wrap) return;
+    const years = Array.from(new Set(entries.map(entryYear))).sort((a, b) => b - a);
+    let current = getWildYearFilter();
+    if (current !== 'all' && !years.includes(parseInt(current, 10))) current = 'all'; // bv. na verwijderen laatste registratie van dat jaar
+    let html = '<div class="chip' + (current === 'all' ? ' active' : '') + '" data-year="all">Alle jaren</div>';
+    html += years.map(y => '<div class="chip' + (current === String(y) ? ' active' : '') + '" data-year="' + y + '">' + y + '</div>').join('');
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        setWildYearFilter(chip.getAttribute('data-year'));
+        wrap.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        renderWildList();
+        applyWildMapFilter();
+      });
+    });
+  }
   function addEntryMarker(entry) {
     const icon = L.divIcon({
       html: '<div style="background:#d94f04;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px;">' + speciesEmoji(entry.species) + '</span></div>',
@@ -2526,6 +2564,7 @@
       toast('Positie aangepast');
     });
     entryMarkers[entry.id] = marker;
+    if (!entryVisibleUnderFilter(entry)) map.removeLayer(marker);
   }
   window.__openWildEdit = function(id) {
     const en = entries.find(e => e.id === id);
@@ -2784,13 +2823,22 @@
   }
 
   function renderWildList() {
+    renderWildYearFilterChips();
     const listEl = document.getElementById('wildListEl');
-    document.getElementById('wildListSubtitle').textContent = entries.length + ' registratie' + (entries.length === 1 ? '' : 's');
     if (entries.length === 0) {
+      document.getElementById('wildListSubtitle').textContent = '0 registraties';
       listEl.innerHTML = '<div class="empty-state"><div class="emoji">🌲</div>Nog geen wild geregistreerd.<br>Tik op de oranje "+ Wild" knop om te beginnen.</div>';
       return;
     }
-    const sorted = entries.slice().sort((a,b) => b.timestamp - a.timestamp);
+    const filtered = entries.filter(entryVisibleUnderFilter);
+    document.getElementById('wildListSubtitle').textContent = getWildYearFilter() === 'all'
+      ? (entries.length + ' registratie' + (entries.length === 1 ? '' : 's'))
+      : (filtered.length + ' van ' + entries.length + ' registraties · ' + getWildYearFilter());
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<div class="empty-state"><div class="emoji">🌲</div>Geen registraties in dit jaar.</div>';
+      return;
+    }
+    const sorted = filtered.slice().sort((a,b) => b.timestamp - a.timestamp);
     listEl.innerHTML = '';
     sorted.forEach(entry => {
       const card = document.createElement('div');
