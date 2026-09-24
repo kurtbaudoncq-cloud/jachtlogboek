@@ -3164,14 +3164,32 @@
 
     el.innerHTML = years.map(y => {
       const d = yearData[y];
-      const breakdown = Object.keys(d.species).sort((a, b) => d.species[b] - d.species[a])
-        .map(sp => d.species[sp] + '× ' + sp).join(', ');
-      return '<div class="tableau-row">' +
-        '<span class="species"><span class="dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + yearColor(y) + ';margin-right:7px;"></span>' + y + '</span>' +
-        '<span class="count">' + d.total + '</span>' +
+      const speciesRows = Object.keys(d.species).sort((a, b) => d.species[b] - d.species[a]).map(sp =>
+        '<div class="tableau-row" style="background:#f4f1ea;">' +
+          '<span class="species">' + speciesEmoji(sp) + ' ' + escapeHtml(sp) + '</span>' +
+          '<span class="count">' + d.species[sp] + '</span>' +
+        '</div>'
+      ).join('') + '<div class="tableau-total"><span>Totaal ' + y + '</span><span>' + d.total + '</span></div>';
+
+      return '<div class="tableau-year-block">' +
+        '<div class="tableau-row tableau-year-toggle" data-year="' + y + '" style="cursor:pointer;">' +
+          '<span class="species"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + yearColor(y) + ';margin-right:7px;"></span>' + y + '</span>' +
+          '<span style="display:flex;align-items:center;gap:8px;"><span class="count">' + d.total + '</span><span class="chevron" style="font-size:12px;color:var(--ink-soft);">▸</span></span>' +
         '</div>' +
-        '<div class="hint" style="margin:-4px 0 8px;">' + escapeHtml(breakdown) + '</div>';
+        '<div class="tableau-year-detail" data-year-detail="' + y + '" style="display:none;margin:-2px 0 8px;">' + speciesRows + '</div>' +
+      '</div>';
     }).join('');
+
+    el.querySelectorAll('.tableau-year-toggle').forEach(row => {
+      row.addEventListener('click', () => {
+        const y = row.getAttribute('data-year');
+        const detail = el.querySelector('[data-year-detail="' + y + '"]');
+        const chevron = row.querySelector('.chevron');
+        const open = detail.style.display !== 'none';
+        detail.style.display = open ? 'none' : '';
+        chevron.textContent = open ? '▸' : '▾';
+      });
+    });
   }
 
   function renderWildList() {
