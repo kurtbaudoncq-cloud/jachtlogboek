@@ -936,11 +936,31 @@
       '<div class="list-card" data-id="' + row.groups.id + '" data-name="' + escapeHtmlEarly(row.groups.name) + '" data-role="' + row.role + '" style="cursor:pointer;">' +
         '<div class="info"><div class="top"><span class="title">' + escapeHtmlEarly(row.groups.name) + '</span></div>' +
         '<div class="meta">' + (row.role === 'admin' ? 'Admin · uitnodigingscode: ' + row.groups.invite_code : 'Lid') + '</div></div>' +
+        (row.role === 'admin' ? '<button type="button" class="btn btn-outline btn-invite-wa" data-invite-code="' + row.groups.invite_code + '" data-invite-name="' + escapeHtmlEarly(row.groups.name) + '" style="margin-left:8px;white-space:nowrap;" title="Uitnodigen via WhatsApp">📲</button>' : '') +
       '</div>'
     ).join('');
     listEl.querySelectorAll('[data-id]').forEach(el => {
-      el.addEventListener('click', () => enterGroup(el.getAttribute('data-id'), el.getAttribute('data-name'), el.getAttribute('data-role')));
+      el.addEventListener('click', (ev) => {
+        if (ev.target.closest('.btn-invite-wa')) return;
+        enterGroup(el.getAttribute('data-id'), el.getAttribute('data-name'), el.getAttribute('data-role'));
+      });
     });
+    listEl.querySelectorAll('.btn-invite-wa').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        inviteViaWhatsapp(btn.getAttribute('data-invite-name'), btn.getAttribute('data-invite-code'));
+      });
+    });
+  }
+
+  function inviteViaWhatsapp(groupName, inviteCode) {
+    const appUrl = 'https://kurtbaudoncq-cloud.github.io/jachtlogboek/';
+    const msg = 'Hey! Ik nodig je uit voor jachtgebied "' + groupName + '" in Jachtlogboek 🦌\n\n' +
+      '1. Ga naar ' + appUrl + '\n' +
+      '2. Maak een account aan (of log in)\n' +
+      '3. Kies "Toegang vragen met uitnodigingscode" en vul in: ' + inviteCode + '\n\n' +
+      'Tot in het veld!';
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
   }
 
   // autoEnter=true (standaard bij inloggen): sla het keuzescherm over als er 0 of 1 groep is.
