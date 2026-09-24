@@ -2934,9 +2934,14 @@
   /* ---------- Init (draait pas na inloggen + groep kiezen) ---------- */
   let appStarted = false;
   async function startApp() {
+    // Jachtgebieden zijn per groep opgeslagen in de cloud, dus dit deel moet
+    // bij ELKE groepswissel opnieuw laden (niet enkel de allereerste keer).
+    await loadBoundary();
     if (appStarted) return;
     appStarted = true;
-    await loadBoundary();
+    // De rest (wildregistraties, markers, sporen, tableaus, eigen markertypes)
+    // staat momenteel nog lokaal op dit toestel en is nog niet per groep
+    // gescheiden — dat laden we dus maar één keer in.
     await loadEntries();
     await loadMarkers();
     await loadTracks();
