@@ -556,6 +556,16 @@
     <div class="hint" id="gebiedLockHint" style="margin-bottom:14px; display:none; color:var(--blaze-dark); font-weight:600;">
       🔒 Dit jachtgebied is vergrendeld. Ontgrendel eerst om te tekenen, importeren of wissen.
     </div>
+    <button class="btn btn-outline" id="btnMoveGebied" style="margin-bottom:8px; display:none;">📦 Verplaats naar andere groep</button>
+    <div class="field" id="moveGebiedArea" style="display:none; margin-bottom:14px;">
+      <label>Verplaats "<span id="moveGebiedName"></span>" naar</label>
+      <select id="moveGebiedTargetGroup"></select>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-ghost" id="btnCancelMoveGebied">Annuleren</button>
+        <button class="btn btn-primary" id="btnConfirmMoveGebied">Verplaatsen</button>
+      </div>
+      <div class="hint" style="margin-top:6px;">Enkel mogelijk naar groepen waar je zelf al lid van bent. Het gebied verdwijnt dan hier en verschijnt in de andere groep.</div>
+    </div>
     <div class="divider"></div>
     <button class="btn btn-secondary" id="btnLocationSearch" style="margin-bottom:10px;">🔍 Zoek locatie op de kaart</button>
     <div class="field" id="locationSearchArea" style="display:none;">
@@ -1284,6 +1294,9 @@
       if (id === 'btnToggleOfficial') return; // viewing Geopunt is always allowed
       el.style.opacity = locked ? '0.5' : '1';
     });
+    const moveBtn = document.getElementById('btnMoveGebied');
+    if (moveBtn) moveBtn.style.display = (currentGroupRole === 'admin') ? '' : 'none';
+    document.getElementById('moveGebiedArea').style.display = 'none';
     renderGebiedQuickSwitch();
   }
   function renderGebiedQuickSwitch() {
@@ -1375,6 +1388,48 @@
     await saveGebieden();
     renderGebiedSelect();
     toast(g.locked ? '🔒 Jachtgebied vergrendeld' : '🔓 Jachtgebied ontgrendeld');
+  });
+
+  document.getElementById('btnMoveGebied').addEventListener('click', async () => {
+    const g = getActiveGebied();
+    if (!g) return;
+    const area = document.getElementById('moveGebiedArea');
+    const sel = document.getElementById('moveGebiedTargetGroup');
+    document.getElementById('moveGebiedName').textContent = g.name;
+    sel.innerHTML = '<option>Groepen laden…</option>';
+    area.style.display = '';
+    const { data, error } = await sb
+      .from('group_members')
+      .select('role, groups ( id, name )')
+      .eq('user_id', currentUser.id);
+    if (error) { toast('Kon groepen niet laden: ' + error.message); area.style.display = 'none'; return; }
+    const others = (data || []).filter(r => r.groups && r.groups.id !== currentGroupId);
+    if (others.length === 0) {
+      sel.innerHTML = '';
+      toast('Je bent nog geen lid van een andere groep');
+      area.style.display = 'none';
+      return;
+    }
+    sel.innerHTML = others.map(r => '<option value="' + r.groups.id + '">' + escapeHtml(r.groups.name) + '</option>').join('');
+  });
+  document.getElementById('btnCancelMoveGebied').addEventListener('click', () => {
+    document.getElementById('moveGebiedArea').style.display = 'none';
+  });
+  document.getElementById('btnConfirmMoveGebied').addEventListener('click', async () => {
+    const g = getActiveGebied();
+    if (!g) return;
+    const targetId = document.getElementById('moveGebiedTargetGroup').value;
+    if (!targetId) return;
+    if (jachtgebieden.length <= 1) {
+      if (!(await appConfirm('Dit is je enige jachtgebied in deze groep. Na verplaatsen blijft de groep leeg (er wordt automatisch een nieuw leeg jachtgebied aangemaakt). Doorgaan?'))) return;
+    } else {
+      if (!(await appConfirm('"' + g.name + '" verplaatsen naar de andere groep?'))) return;
+    }
+    const { error } = await sb.from('jachtgebieden').update({ group_id: targetId }).eq('id', g.id);
+    if (error) { toast('Kon niet verplaatsen: ' + error.message); return; }
+    toast('"' + g.name + '" verplaatst');
+    document.getElementById('moveGebiedArea').style.display = 'none';
+    await loadBoundary(); // herlaadt de lijst voor de huidige groep (gebied is nu weg)
   });
 
   async function loadBoundary() {
