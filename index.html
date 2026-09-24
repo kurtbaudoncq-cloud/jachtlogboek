@@ -441,7 +441,7 @@
   <div class="gebied-quick-switch" id="gebiedQuickSwitch" style="display:none;">
     <div class="hint" style="color:var(--parchment-dim); margin-bottom:8px;">Wissel van jachtgebied</div>
     <div id="gebiedQuickList"></div>
-    <button class="btn btn-outline" id="btnQuickManageGebieden" style="margin-top:8px;">⚙️ Jachtgebieden beheren</button>
+    <button class="btn btn-outline" id="btnQuickManageGebieden" style="margin-top:8px;">➕ Nieuw jachtgebied / toegang vragen</button>
   </div>
 
   <div id="map"></div>
@@ -1307,46 +1307,48 @@
     document.getElementById('moveGebiedArea').style.display = 'none';
     const deleteBtn = document.getElementById('btnDeleteGebied');
     if (deleteBtn) deleteBtn.style.display = (currentGroupRole === 'admin' && multi) ? '' : 'none';
-    renderGebiedQuickSwitch();
   }
-  function renderGebiedQuickSwitch() {
+  // Bovenaan de kaart: 1 jachtgebied = 1 groep, dus "wissel van jachtgebied" toont gewoon al je groepen.
+  async function renderTopGebiedSwitchList() {
     const list = document.getElementById('gebiedQuickList');
     if (!list) return;
-    list.innerHTML = jachtgebieden.map(g =>
-      '<div class="gebied-quick-item' + (g.id === activeGebiedId ? ' active' : '') + '" data-id="' + g.id + '">' +
-        '<span>' + escapeHtml(g.name) + '</span><span>' + (g.locked ? '🔒' : '') + '</span>' +
+    list.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Laden…</div>';
+    const { data, error } = await sb
+      .from('group_members')
+      .select('role, groups ( id, name )')
+      .eq('user_id', currentUser.id);
+    if (error) { list.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Kon jachtgebieden niet laden</div>'; return; }
+    const rows = (data || []).filter(r => r.groups).sort((a, b) => a.groups.name.localeCompare(b.groups.name));
+    list.innerHTML = rows.map(r =>
+      '<div class="gebied-quick-item' + (r.groups.id === currentGroupId ? ' active' : '') + '" data-id="' + r.groups.id + '" data-name="' + escapeHtml(r.groups.name) + '" data-role="' + r.role + '">' +
+        '<span>' + escapeHtml(r.groups.name) + '</span>' +
       '</div>'
     ).join('');
     list.querySelectorAll('.gebied-quick-item').forEach(item => {
       item.addEventListener('click', async () => {
-        const id = item.getAttribute('data-id');
-        if (id !== activeGebiedId) {
-          activeGebiedId = id;
-          boundaryLatLngs = getActiveGebied().zones;
-          await saveGebieden();
-          renderGebiedSelect();
-          renderBoundary();
-          toast('Gewisseld naar "' + getActiveGebied().name + '"');
-        }
         document.getElementById('gebiedQuickSwitch').style.display = 'none';
+        const id = item.getAttribute('data-id');
+        if (id === currentGroupId) return;
+        const name = item.getAttribute('data-name');
+        await enterGroup(id, name, item.getAttribute('data-role'));
+        toast('Gewisseld naar "' + name + '"');
       });
     });
   }
   document.getElementById('gebiedNameDisplay').addEventListener('click', async () => {
-    if (jachtgebieden.length > 1) {
-      // Legacy-geval: deze groep bevat toch meerdere jachtgebieden — toon het wisselpaneel.
-      const panel = document.getElementById('gebiedQuickSwitch');
-      const isHidden = window.getComputedStyle(panel).display === 'none';
-      panel.style.display = isHidden ? 'block' : 'none';
-      toast(isHidden ? 'Lijst geopend' : 'Lijst gesloten');
-      return;
+    const panel = document.getElementById('gebiedQuickSwitch');
+    const isHidden = window.getComputedStyle(panel).display === 'none';
+    if (isHidden) {
+      panel.style.display = 'block';
+      await renderTopGebiedSwitchList();
+    } else {
+      panel.style.display = 'none';
     }
-    // Normale situatie: 1 jachtgebied = 1 groep, dus "wissel van jachtgebied" = "wissel van groep".
-    await openGroupSwitcher();
   });
-  document.getElementById('btnQuickManageGebieden').addEventListener('click', () => {
+  document.getElementById('btnQuickManageGebieden').addEventListener('click', async () => {
     document.getElementById('gebiedQuickSwitch').style.display = 'none';
-    openSheet('boundary');
+    document.getElementById('authOverlay').style.display = 'flex';
+    await loadMyGroups(false);
   });
   document.getElementById('gebiedSelect').addEventListener('change', async (e) => {
     activeGebiedId = e.target.value;
