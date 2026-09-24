@@ -181,7 +181,7 @@
     position:fixed; left:0; right:0; bottom:0; z-index:950;
     background:var(--parchment); border-radius:18px 18px 0 0;
     box-shadow:0 -8px 24px rgba(0,0,0,.3);
-    max-height:88vh; overflow-y:auto;
+    max-height:88vh; max-height:88dvh; overflow-y:auto; overscroll-behavior:contain;
     transform:translateY(102%); transition:transform .22s ease;
     padding:18px 18px calc(22px + var(--safe-bottom));
   }
