@@ -1732,6 +1732,27 @@
     startDrawing();
     toast('Teken nu de omtrek na — de foto blijft zichtbaar als hulplijn');
   });
+  function zoneThumbSvg(ring) {
+    if (!ring || ring.length < 3) return '<div class="thumb">📐</div>';
+    const lats = ring.map(p => p[0]), lngs = ring.map(p => p[1]);
+    const minLat = Math.min.apply(null, lats), maxLat = Math.max.apply(null, lats);
+    const minLng = Math.min.apply(null, lngs), maxLng = Math.max.apply(null, lngs);
+    const spanLat = (maxLat - minLat) || 0.0001;
+    const spanLng = (maxLng - minLng) || 0.0001;
+    const size = 52, pad = 6, draw = size - pad * 2;
+    // gelijke schaal op beide assen zodat de vorm niet vervormt
+    const scale = draw / Math.max(spanLat, spanLng);
+    const wLat = spanLat * scale, wLng = spanLng * scale;
+    const offX = (draw - wLng) / 2, offY = (draw - wLat) / 2;
+    const pts = ring.map(p => {
+      const x = pad + offX + ((p[1] - minLng) / spanLng) * wLng;
+      const y = pad + offY + (1 - (p[0] - minLat) / spanLat) * wLat; // lat omhoog = y omlaag in SVG
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    return '<svg class="thumb" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" style="background:var(--parchment-dim);">' +
+      '<polygon points="' + pts + '" fill="rgba(217,79,4,.28)" stroke="#d94f04" stroke-width="2" stroke-linejoin="round"/>' +
+    '</svg>';
+  }
   function renderZonesList() {
     const el = document.getElementById('zonesListEl');
     if (!el) return;
@@ -1740,15 +1761,28 @@
     el.innerHTML = '<div class="hint" style="margin-bottom:8px;">Zones in dit jachtgebied:</div>' +
       boundaryLatLngs.map((ring, idx) =>
         '<div class="list-card" style="margin-bottom:6px;">' +
-          '<div class="thumb">📐</div>' +
+          zoneThumbSvg(ring) +
           '<div class="info"><div class="title">Zone ' + (idx + 1) + '</div><div class="meta">' + ring.length + ' punten</div></div>' +
           '<div class="list-actions">' +
             '<button data-act="edit" data-idx="' + idx + '" title="Bewerk"' + (locked ? ' disabled style="opacity:.4;"' : '') + '>✏️</button>' +
+            '<button data-act="delete" data-idx="' + idx + '" title="Verwijder deze zone"' + (locked ? ' disabled style="opacity:.4;"' : '') + '>🗑️</button>' +
           '</div>' +
         '</div>'
       ).join('');
     el.querySelectorAll('[data-act=edit]').forEach(btn => {
       btn.addEventListener('click', () => editZone(parseInt(btn.getAttribute('data-idx'), 10)));
+    });
+    el.querySelectorAll('[data-act=delete]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (blockedByLock()) return;
+        const idx = parseInt(btn.getAttribute('data-idx'), 10);
+        if (!(await appConfirm('Zone ' + (idx + 1) + ' verwijderen?'))) return;
+        boundaryLatLngs.splice(idx, 1);
+        if (boundaryLatLngs.length === 0) boundaryLatLngs = null;
+        await saveBoundary();
+        renderBoundary();
+        toast('Zone ' + (idx + 1) + ' verwijderd');
+      });
     });
   }
   document.getElementById('btnUndoZone').addEventListener('click', async () => {
