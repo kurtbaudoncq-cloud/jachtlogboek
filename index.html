@@ -2756,7 +2756,10 @@
 
   function speciesEmoji(sp) {
     const m = { 'Ree':'🦌','Wild zwijn':'🐗','Vos':'🦊','Fazant':'🐦','Haas':'🐇','Konijn':'🐇','Eend':'🦆','Houtduif':'🐦' };
-    return m[sp] || '📍';
+    if (m[sp]) return m[sp];
+    const trimmed = String(sp || '').trim();
+    const key = Object.keys(m).find(k => k.toLowerCase() === trimmed.toLowerCase());
+    return key ? m[key] : '📍';
   }
 
   /* ---------- Kleur per jaar (icoontjes op kaart + jaarfilter-chips) ---------- */
