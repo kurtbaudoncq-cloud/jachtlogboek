@@ -2769,30 +2769,46 @@
       html: '<div style="background:' + col + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px;">' + speciesEmoji(entry.species) + '</span></div>',
       className:'', iconSize:[30,30], iconAnchor:[15,28]
     });
-    const marker = L.marker([entry.lat, entry.lng], { icon, draggable: true }).addTo(map);
+    const marker = L.marker([entry.lat, entry.lng], { icon, draggable: false }).addTo(map);
     let popupHtml = '<strong>' + entry.species + '</strong><br>' + fmtDateShort(entry.timestamp);
     if (entry.note) popupHtml += '<br><em>' + escapeHtml(entry.note) + '</em>';
     if (entry.photo) {
       const url = URL.createObjectURL(entry.photo);
       popupHtml = '<img src="' + url + '" style="width:160px;border-radius:8px;display:block;margin-bottom:6px;">' + popupHtml;
     }
-    popupHtml += '<br><button type="button" onclick="window.__openWildEdit(\'' + entry.id + '\')" style="margin-top:6px;padding:6px 10px;border:none;border-radius:6px;background:' + col + ';color:#fff;font-weight:600;">✏️ Bewerken / verwijderen</button>';
+    popupHtml += '<div style="margin-top:6px;display:flex;gap:6px;">' +
+      '<button type="button" onclick="window.__openWildEdit(\'' + entry.id + '\')" style="padding:6px 10px;border:none;border-radius:6px;background:' + col + ';color:#fff;font-weight:600;">✏️ Bewerken</button>' +
+      '<button type="button" onclick="window.__moveWildEntry(\'' + entry.id + '\')" style="padding:6px 10px;border:1px solid ' + col + ';border-radius:6px;background:#fff;color:' + col + ';font-weight:600;">↔️ Verplaats</button>' +
+      '</div>';
     marker.bindPopup(popupHtml);
-    marker.on('dragend', async (ev) => {
-      const ll = ev.target.getLatLng();
-      entry.lat = ll.lat; entry.lng = ll.lng;
-      entry.insideBoundary = isInsideBoundary(ll.lat, ll.lng);
-      entry.updated_at = Date.now(); entry._dirty = true;
-      await idbPut('entries', entry);
-      toast('Positie aangepast');
-      syncAllStores();
-    });
     entryMarkers[entry.id] = marker;
     if (!entryVisibleUnderFilter(entry)) map.removeLayer(marker);
   }
   window.__openWildEdit = function(id) {
     const en = entries.find(e => e.id === id);
     if (en) { closeAllSheets(); openWildEditSheet(en); }
+  };
+  // Positie van een registratie wijzigen kan niet zomaar door te verslepen (te makkelijk om
+  // per ongeluk te doen) — het gaat via deze bewuste tussenstap: tik op de kaart + bevestig.
+  window.__moveWildEntry = function(id) {
+    const en = entries.find(e => e.id === id);
+    if (!en) return;
+    if (entryMarkers[id]) entryMarkers[id].closePopup();
+    closeAllSheets();
+    toast('Tik op de kaart op de juiste locatie voor deze registratie');
+    map.once('click', async (ev) => {
+      const ll = ev.latlng;
+      const ok = await appConfirm('Positie van "' + en.species + '" (' + fmtDateShort(en.timestamp) + ') verplaatsen naar dit punt?');
+      if (!ok) return;
+      en.lat = ll.lat; en.lng = ll.lng;
+      en.insideBoundary = isInsideBoundary(ll.lat, ll.lng);
+      en.updated_at = Date.now(); en._dirty = true;
+      await idbPut('entries', en);
+      if (entryMarkers[id]) { map.removeLayer(entryMarkers[id]); delete entryMarkers[id]; }
+      addEntryMarker(en);
+      toast('Positie aangepast');
+      syncAllStores();
+    });
   };
   function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
