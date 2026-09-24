@@ -878,6 +878,22 @@
   let currentGroupName = '';
   let currentGroupRole = null;
 
+  /* ---------- Uitnodigingscode uit WhatsApp-link (?invite=CODE) ---------- */
+  (function capturePendingInvite() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('invite');
+      if (code) {
+        localStorage.setItem('jlb_pendingInvite', code.trim());
+        params.delete('invite');
+        const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
+        window.history.replaceState({}, '', cleanUrl);
+      }
+    } catch (e) { /* localStorage niet beschikbaar, negeren */ }
+  })();
+  function getPendingInvite() { try { return localStorage.getItem('jlb_pendingInvite') || ''; } catch (e) { return ''; } }
+  function clearPendingInvite() { try { localStorage.removeItem('jlb_pendingInvite'); } catch (e) {} }
+
   function authMsg(text) { const el = document.getElementById('authMsg'); if (el) el.textContent = text || ''; }
   function showAuthStep(step) {
     ['Login','Register','Groups'].forEach(s => {
