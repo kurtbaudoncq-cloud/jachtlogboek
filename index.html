@@ -970,12 +970,9 @@
   }
 
   function inviteViaWhatsapp(groupName, inviteCode) {
-    const appUrl = 'https://kurtbaudoncq-cloud.github.io/jachtlogboek/';
+    const appUrl = 'https://kurtbaudoncq-cloud.github.io/jachtlogboek/?invite=' + encodeURIComponent(inviteCode);
     const msg = 'Hey! Ik nodig je uit voor jachtgebied "' + groupName + '" in Jachtlogboek 🦌\n\n' +
-      '1. Ga naar ' + appUrl + '\n' +
-      '2. Maak een account aan (of log in)\n' +
-      '3. Kies "Toegang vragen met uitnodigingscode" en vul in: ' + inviteCode + '\n\n' +
-      'Tot in het veld!';
+      'Open deze link, maak een account aan (of log in), en je wordt automatisch toegevoegd:\n' + appUrl;
     window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
   }
 
@@ -983,6 +980,23 @@
   // autoEnter=false (via het account-menu): toon altijd de volledige lijst, ook bij 1 groep.
   async function loadMyGroups(autoEnter) {
     if (autoEnter === undefined) autoEnter = true;
+
+    const pendingCode = getPendingInvite();
+    if (pendingCode) {
+      authMsg('Toegang tot jachtgebied regelen…');
+      const { data: joinedId, error: joinErr } = await sb.rpc('join_group_by_code', { code: pendingCode });
+      if (!joinErr) {
+        clearPendingInvite();
+        const { data: g } = await sb.from('groups').select('name').eq('id', joinedId).single();
+        enterGroup(joinedId, g ? g.name : 'Jachtgebied', 'lid');
+        return;
+      }
+      // Uitnodigingscode ongeldig/verlopen of al lid: laat vallen en toon gewoon het normale scherm,
+      // met de code alvast ingevuld zodat de gebruiker het manueel kan proberen.
+      document.getElementById('joinGroupCode').value = pendingCode;
+      clearPendingInvite();
+    }
+
     authMsg('Jachtgebieden laden…');
     const { data, error } = await sb
       .from('group_members')
@@ -3749,6 +3763,20 @@
       const { data } = await sb.auth.getSession();
       if (data && data.session) {
         currentUser = data.session.user;
+        const pendingCode = getPendingInvite();
+        if (pendingCode) {
+          const useThisAccount = await appConfirm(
+            'Je bent al ingelogd als ' + currentUser.email + '. Wil je deze uitnodiging met dat account accepteren?\n\n' +
+            '(Kies "Annuleren" om eerst uit te loggen en met een ander account in of te loggen.)'
+          );
+          if (!useThisAccount) {
+            await sb.auth.signOut();
+            currentUser = null; currentGroupId = null; currentGroupName = ''; currentGroupRole = null;
+            authMsg('Je bent uitgelogd. Log in of registreer met het account waarmee je de uitnodiging wil accepteren.');
+            showAuthStep('Login');
+            return;
+          }
+        }
         await loadMyGroups();
       } else {
         showAuthStep('Login');
