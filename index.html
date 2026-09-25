@@ -265,6 +265,10 @@
   .list-card .info .note{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #authGroupsList .list-card .info .title{ color:var(--ink); }
   #authGroupsList .list-card .info .meta{ color:var(--ink-soft); }
+  .btn-invite-wa{
+    width:36px; height:36px; padding:0; flex:0 0 auto; border-radius:50%;
+    font-size:17px; line-height:1; margin-left:0 !important;
+  }
   .list-actions{ display:flex; flex-direction:column; gap:6px; }
   .list-actions button{ border:none; background:none; font-size:16px; color:var(--ink-soft); cursor:pointer; padding:4px; }
 
@@ -952,7 +956,7 @@
       '<div class="list-card" data-id="' + row.groups.id + '" data-name="' + escapeHtmlEarly(row.groups.name) + '" data-role="' + row.role + '" style="cursor:pointer;">' +
         '<div class="info"><div class="top"><span class="title">' + escapeHtmlEarly(row.groups.name) + '</span></div>' +
         '<div class="meta">' + (row.role === 'admin' ? 'Admin · uitnodigingscode: ' + row.groups.invite_code : 'Lid') + '</div></div>' +
-        (row.role === 'admin' ? '<button type="button" class="btn btn-outline btn-invite-wa" data-invite-code="' + row.groups.invite_code + '" data-invite-name="' + escapeHtmlEarly(row.groups.name) + '" style="margin-left:8px;white-space:nowrap;" title="Uitnodigen via WhatsApp">📲</button>' : '') +
+        (row.role === 'admin' ? '<button type="button" class="btn btn-outline btn-invite-wa" data-invite-code="' + row.groups.invite_code + '" data-invite-name="' + escapeHtmlEarly(row.groups.name) + '" title="Uitnodigen via WhatsApp">📲</button>' : '') +
       '</div>'
     ).join('');
     listEl.querySelectorAll('[data-id]').forEach(el => {
