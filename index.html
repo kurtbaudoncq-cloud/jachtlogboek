@@ -983,7 +983,16 @@
     if (!email || !password) { authMsg('Vul e-mail en wachtwoord in'); return; }
     if (password.length < 6) { authMsg('Wachtwoord moet minstens 6 tekens zijn'); return; }
     authMsg('Account aanmaken…');
-    const { data, error } = await sb.auth.signUp({ email, password, options: { data: { display_name: name || email } } });
+    // Geef een eventuele uitnodigingscode mee in de bevestigingslink zelf: zo werkt de
+    // uitnodiging ook als de bevestigingsmail in een andere browser/app geopend wordt
+    // dan waar geregistreerd werd (bv. WhatsApp's ingebouwde browser vs. de Mail-app).
+    const pendingCodeAtRegister = getPendingInvite();
+    const confirmUrl = 'https://kurtbaudoncq-cloud.github.io/jachtlogboek/' +
+      (pendingCodeAtRegister ? '?invite=' + encodeURIComponent(pendingCodeAtRegister) : '');
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: { data: { display_name: name || email }, emailRedirectTo: confirmUrl }
+    });
     if (error) { authMsg(error.message); return; }
     if (data.session) {
       currentUser = data.user;
