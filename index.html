@@ -402,7 +402,8 @@
       <div class="field"><label style="color:var(--parchment-dim);">E-mail</label><input type="email" id="loginEmail" autocomplete="username"></div>
       <div class="field"><label style="color:var(--parchment-dim);">Wachtwoord</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
       <button class="btn btn-primary" id="btnDoLogin">Inloggen</button>
-      <div style="text-align:center;margin-top:16px;font-size:14px;">Nog geen account? <a href="#" id="linkToRegister" style="color:#e8c37a;">Registreer</a></div>
+      <div style="text-align:center;margin-top:14px;font-size:13px;"><a href="#" id="linkToForgot" style="color:var(--parchment-dim);">Wachtwoord vergeten?</a></div>
+      <div style="text-align:center;margin-top:10px;font-size:14px;">Nog geen account? <a href="#" id="linkToRegister" style="color:#e8c37a;">Registreer</a></div>
     </div>
 
     <div id="authStepRegister" style="display:none;">
@@ -412,6 +413,21 @@
       <div class="field"><label style="color:var(--parchment-dim);">Wachtwoord (min. 6 tekens)</label><input type="password" id="registerPassword" autocomplete="new-password"></div>
       <button class="btn btn-primary" id="btnDoRegister">Registreren</button>
       <div style="text-align:center;margin-top:16px;font-size:14px;">Al een account? <a href="#" id="linkToLogin" style="color:#e8c37a;">Inloggen</a></div>
+    </div>
+
+    <div id="authStepForgot" style="display:none;">
+      <h2 style="margin-bottom:4px;">Wachtwoord vergeten</h2>
+      <div class="hint" style="color:var(--parchment-dim);margin-bottom:12px;">Vul je e-mailadres in, dan sturen we je een link om een nieuw wachtwoord in te stellen.</div>
+      <div class="field"><label style="color:var(--parchment-dim);">E-mail</label><input type="email" id="forgotEmail" autocomplete="username"></div>
+      <button class="btn btn-primary" id="btnDoForgot">Stuur resetlink</button>
+      <div style="text-align:center;margin-top:16px;font-size:14px;"><a href="#" id="linkForgotToLogin" style="color:#e8c37a;">Terug naar inloggen</a></div>
+    </div>
+
+    <div id="authStepNewPassword" style="display:none;">
+      <h2 style="margin-bottom:4px;">Nieuw wachtwoord instellen</h2>
+      <div class="hint" style="color:var(--parchment-dim);margin-bottom:12px;">Kies een nieuw wachtwoord voor je account.</div>
+      <div class="field"><label style="color:var(--parchment-dim);">Nieuw wachtwoord (min. 6 tekens)</label><input type="password" id="newPassword" autocomplete="new-password"></div>
+      <button class="btn btn-primary" id="btnDoNewPassword">Wachtwoord instellen</button>
     </div>
 
     <div id="authStepGroups" style="display:none;">
@@ -900,7 +916,7 @@
 
   function authMsg(text) { const el = document.getElementById('authMsg'); if (el) el.textContent = text || ''; }
   function showAuthStep(step) {
-    ['Login','Register','Groups'].forEach(s => {
+    ['Login','Register','Groups','Forgot','NewPassword'].forEach(s => {
       document.getElementById('authStep' + s).style.display = (s === step) ? '' : 'none';
     });
     authMsg('');
@@ -908,6 +924,38 @@
   function escapeHtmlEarly(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   document.getElementById('linkToRegister').addEventListener('click', (e) => { e.preventDefault(); showAuthStep('Register'); });
+  document.getElementById('linkToForgot').addEventListener('click', (e) => { e.preventDefault(); showAuthStep('Forgot'); });
+  document.getElementById('linkForgotToLogin').addEventListener('click', (e) => { e.preventDefault(); showAuthStep('Login'); });
+
+  document.getElementById('btnDoForgot').addEventListener('click', async () => {
+    const email = document.getElementById('forgotEmail').value.trim();
+    if (!email) { authMsg('Vul je e-mailadres in'); return; }
+    authMsg('Bezig met versturen…');
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://kurtbaudoncq-cloud.github.io/jachtlogboek/'
+    });
+    if (error) { authMsg(error.message); return; }
+    authMsg('E-mail verstuurd! Klik op de link in je mailbox om een nieuw wachtwoord in te stellen.');
+  });
+
+  document.getElementById('btnDoNewPassword').addEventListener('click', async () => {
+    const pw = document.getElementById('newPassword').value;
+    if (!pw || pw.length < 6) { authMsg('Wachtwoord moet minstens 6 tekens zijn'); return; }
+    authMsg('Bezig met opslaan…');
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) { authMsg(error.message); return; }
+    authMsg('Wachtwoord aangepast! Je bent ingelogd.');
+    const { data } = await sb.auth.getUser();
+    currentUser = data.user;
+    await loadMyGroups();
+  });
+
+  sb.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      document.getElementById('authOverlay').style.display = 'flex';
+      showAuthStep('NewPassword');
+    }
+  });
   document.getElementById('linkToLogin').addEventListener('click', (e) => { e.preventDefault(); showAuthStep('Login'); });
   document.getElementById('linkSignOut').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -3763,6 +3811,9 @@
 
   /* ---------- Auth-opstart: bestaande sessie? ---------- */
   (async function initAuth() {
+    // Kwam de gebruiker net van een "wachtwoord vergeten"-link? Dan vangt
+    // de PASSWORD_RECOVERY-listener dit af en tonen we het normale scherm niet.
+    if (window.location.hash.indexOf('type=recovery') !== -1) return;
     try {
       const { data } = await sb.auth.getSession();
       if (data && data.session) {
