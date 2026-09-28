@@ -53,6 +53,7 @@
   .topbar .brand strong{ font-size:26px; font-weight:800; color:#e8c37a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .topbar .brand span{ font-size:11px; color:var(--parchment-dim); opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .topbar-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; margin-left:auto; }
+  .topbar-actions-left{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
   .icon-btn{
     background:var(--forest-800); border:1px solid var(--forest-600); color:var(--parchment);
     width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center;
@@ -461,6 +462,9 @@
 <div id="app">
 
   <div class="topbar">
+    <div class="topbar-actions-left">
+      <button class="icon-btn" id="btnMenu" title="Menu">☰</button>
+    </div>
     <div class="brand">
       <span class="app-label">Jachtlogboek</span>
       <strong id="gebiedNameDisplay" style="cursor:pointer;">Geen jachtgebied <span style="font-size:11px;opacity:.75;">▾</span></strong>
@@ -534,7 +538,6 @@
   <div class="fab-bar">
     <button class="pill-btn" id="btnAddMarker">📍 Marker</button>
     <button class="fab-main" id="btnAddWild"><span class="plus">＋</span>Wild</button>
-    <button class="pill-btn" id="btnMenu">☰ Meer</button>
   </div>
 
   <div class="toast" id="toast"></div>
