@@ -449,6 +449,15 @@
   </div>
 </div>
 
+<div id="membersOverlay" style="position:fixed;inset:0;z-index:5100;background:rgba(16,28,19,.85);display:none;align-items:center;justify-content:center;padding:24px;">
+  <div style="width:100%;max-width:400px;max-height:80vh;overflow-y:auto;background:var(--forest-900);border-radius:16px;padding:20px;color:var(--parchment);">
+    <h2 style="margin-bottom:2px;" id="membersGroupName">Leden</h2>
+    <div class="hint" style="color:var(--parchment-dim);margin-bottom:14px;">Jachtmaats in dit jachtgebied. Als admin kan je een lid verwijderen.</div>
+    <div id="membersList"></div>
+    <button class="btn btn-outline" id="btnCloseMembers" style="margin-top:16px;">Sluiten</button>
+  </div>
+</div>
+
 <div id="app">
 
   <div class="topbar">
@@ -1014,6 +1023,7 @@
         '<div class="info"><div class="top"><span class="title">' + escapeHtmlEarly(row.groups.name) + '</span></div>' +
         '<div class="meta">' + (row.role === 'admin' ? 'Admin · uitnodigingscode: ' + row.groups.invite_code : 'Lid') + '</div></div>' +
         (row.role === 'admin' ? '<button type="button" class="btn btn-outline btn-invite-wa" data-invite-code="' + row.groups.invite_code + '" data-invite-name="' + escapeHtmlEarly(row.groups.name) + '" title="Uitnodigen via WhatsApp">📲</button>' : '') +
+        (row.role === 'admin' ? '<button type="button" class="btn btn-outline btn-invite-wa" data-members-id="' + row.groups.id + '" data-members-name="' + escapeHtmlEarly(row.groups.name) + '" title="Leden beheren">👥</button>' : '') +
       '</div>'
     ).join('');
     listEl.querySelectorAll('[data-id]').forEach(el => {
@@ -1022,10 +1032,16 @@
         enterGroup(el.getAttribute('data-id'), el.getAttribute('data-name'), el.getAttribute('data-role'));
       });
     });
-    listEl.querySelectorAll('.btn-invite-wa').forEach(btn => {
+    listEl.querySelectorAll('[data-invite-code]').forEach(btn => {
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         inviteViaWhatsapp(btn.getAttribute('data-invite-name'), btn.getAttribute('data-invite-code'));
+      });
+    });
+    listEl.querySelectorAll('[data-members-id]').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        openMembersOverlay(btn.getAttribute('data-members-id'), btn.getAttribute('data-members-name'));
       });
     });
   }
@@ -1036,6 +1052,48 @@
       'Open deze link, maak een account aan (of log in), en je wordt automatisch toegevoegd:\n' + appUrl;
     window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
   }
+
+  /* ---------- Leden beheren (bekijken + verwijderen) ---------- */
+  async function openMembersOverlay(groupId, groupName) {
+    document.getElementById('membersGroupName').textContent = 'Leden — ' + groupName;
+    const listEl = document.getElementById('membersList');
+    listEl.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Laden…</div>';
+    document.getElementById('membersOverlay').style.display = 'flex';
+    await renderMembersList(groupId, groupName);
+  }
+  async function renderMembersList(groupId, groupName) {
+    const listEl = document.getElementById('membersList');
+    const { data, error } = await sb
+      .from('group_members')
+      .select('user_id, role, joined_at, profiles ( display_name, email )')
+      .eq('group_id', groupId)
+      .order('role', { ascending: true });
+    if (error) { listEl.innerHTML = '<div class="hint" style="color:#f2b8b8;">Kon leden niet laden: ' + escapeHtmlEarly(error.message) + '</div>'; return; }
+    if (!data || data.length === 0) { listEl.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Geen leden gevonden.</div>'; return; }
+    listEl.innerHTML = data.map(m => {
+      const naam = (m.profiles && (m.profiles.display_name || m.profiles.email)) || 'Onbekend lid';
+      const isSelf = m.user_id === currentUser.id;
+      return '<div class="list-card" style="cursor:default;">' +
+        '<div class="info"><div class="top"><span class="title">' + escapeHtmlEarly(naam) + (isSelf ? ' (jij)' : '') + '</span></div>' +
+        '<div class="meta">' + (m.role === 'admin' ? 'Admin' : 'Lid') + '</div></div>' +
+        (m.role !== 'admin' ? '<button type="button" class="btn btn-danger btn-remove-member" data-user-id="' + m.user_id + '" data-naam="' + escapeHtmlEarly(naam) + '" title="Lid verwijderen" style="width:36px;height:36px;padding:0;border-radius:50%;flex:0 0 auto;">🗑️</button>' : '') +
+      '</div>';
+    }).join('');
+    listEl.querySelectorAll('.btn-remove-member').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const userId = btn.getAttribute('data-user-id');
+        const naam = btn.getAttribute('data-naam');
+        if (!(await appConfirm('"' + naam + '" verwijderen uit "' + groupName + '"? Deze persoon verliest toegang tot dit jachtgebied.'))) return;
+        const { error: delErr } = await sb.from('group_members').delete().eq('group_id', groupId).eq('user_id', userId);
+        if (delErr) { toast('Kon lid niet verwijderen: ' + delErr.message); return; }
+        toast('"' + naam + '" verwijderd uit "' + groupName + '"');
+        await renderMembersList(groupId, groupName);
+      });
+    });
+  }
+  document.getElementById('btnCloseMembers').addEventListener('click', () => {
+    document.getElementById('membersOverlay').style.display = 'none';
+  });
 
   // autoEnter=true (standaard bij inloggen): sla het keuzescherm over als er 0 of 1 groep is.
   // autoEnter=false (via het account-menu): toon altijd de volledige lijst, ook bij 1 groep.
@@ -3812,10 +3870,15 @@
     buildSpeciesGrid();
     await loadCustomMarkerTypes();
     buildMarkerTypeGrid();
-    try {
-      const pos = await getPosition();
-      map.setView([pos.lat, pos.lng], 14);
-    } catch (e) { /* keep default view */ }
+    // Als het jachtgebied al een grens heeft, staat de kaart daar door loadBoundary()
+    // (renderBoundary → fitBounds) al netjes op gecentreerd — dat mag de huidige
+    // GPS-locatie niet overschrijven. Alleen zonder grens vallen we terug op GPS.
+    if (!boundaryLatLngs || boundaryLatLngs.length === 0) {
+      try {
+        const pos = await getPosition();
+        map.setView([pos.lat, pos.lng], 14);
+      } catch (e) { /* keep default view */ }
+    }
   }
 
   /* ---------- Auth-opstart: bestaande sessie? ---------- */
