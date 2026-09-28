@@ -831,8 +831,11 @@
     <select id="tableauSeasonSelect" style="margin-bottom:14px; display:none;"></select>
     <div id="tableauContent"></div>
     <div class="divider"></div>
-    <h2 style="font-size:16px;">Totaal per kalenderjaar</h2>
-    <div id="tableauYearlyContent" style="margin-top:6px;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <h2 style="font-size:16px;margin:0;">Totaal per kalenderjaar</h2>
+      <button class="btn btn-outline" id="btnExportJaarverslag" style="width:auto;padding:8px 12px;font-size:13px;">⬇️ Jaarverslag naar Excel</button>
+    </div>
+    <div id="tableauYearlyContent" style="margin-top:10px;"></div>
     <div class="divider"></div>
     <h2 style="font-size:16px;">Ingevoerde jachtdagen</h2>
     <div id="tableauDaysList" style="margin-top:10px;"></div>
@@ -895,6 +898,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function(){
   "use strict";
