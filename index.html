@@ -463,7 +463,7 @@
   <div class="topbar">
     <div class="brand">
       <span class="app-label">Jachtlogboek</span>
-      <strong id="gebiedNameDisplay" style="cursor:pointer;">Geen jachtgebied</strong>
+      <strong id="gebiedNameDisplay" style="cursor:pointer;">Geen jachtgebied <span style="font-size:11px;opacity:.75;">▾</span></strong>
       <span id="zoneLabel"></span>
     </div>
     <div class="topbar-actions">
@@ -475,6 +475,7 @@
     <div class="hint" style="color:var(--parchment-dim); margin-bottom:8px;">Wissel van jachtgebied</div>
     <div id="gebiedQuickList"></div>
     <button class="btn btn-outline" id="btnQuickManageGebieden" style="margin-top:8px;">➕ Nieuw jachtgebied / toegang vragen</button>
+    <div id="accountInfoSub" style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.15);font-size:11.5px;color:var(--parchment-dim);">—</div>
   </div>
 
   <div id="map"></div>
@@ -505,7 +506,6 @@
     <button class="float-btn" id="btnLayer" title="Kaartlaag wisselen">🛰️</button>
     <button class="float-btn" id="btnLocate" title="Mijn locatie">◎</button>
     <button class="float-btn" id="btnWind" title="Windrichting">🧭</button>
-    <button class="float-btn" id="btnShowAllGebieden" title="Toon alle jachtgebieden">🧩</button>
   </div>
 
   <div class="wind-card" id="windCard" style="display:none;">
@@ -569,7 +569,6 @@
       <button class="menu-item" data-open="boundary"><span class="emoji">📐</span><span class="col">Jachtgebied grens<div class="sub">Tekenen of importeren</div></span></button>
       <button class="menu-item" data-open="tableau"><span class="emoji">📊</span><span class="col">Afschot / Tableau<div class="sub">Aantallen per soort</div></span></button>
       <button class="menu-item" data-open="data"><span class="emoji">⇅</span><span class="col">Data<div class="sub">Back-up maken of terugzetten</div></span></button>
-      <button class="menu-item" id="btnAccountInfo"><span class="emoji">👤</span><span class="col" id="accountInfoLabel">Jachtgebied<div class="sub" id="accountInfoSub">—</div></span></button>
     </div>
   </div>
 
@@ -1176,8 +1175,6 @@
     document.getElementById('authOverlay').style.display = 'flex';
     await loadMyGroups(false);
   }
-  document.getElementById('btnAccountInfo').addEventListener('click', openGroupSwitcher);
-
   /* ---------- IndexedDB helper ---------- */
   const DB_NAME = "jachtlogboek";
   const DB_VERSION = 3;
@@ -1644,17 +1641,11 @@
     });
     allGebiedenLayer = L.layerGroup(layers).addTo(map);
   }
-  document.getElementById('btnShowAllGebieden').addEventListener('click', () => {
-    showAllGebieden = !showAllGebieden;
-    document.getElementById('btnShowAllGebieden').style.background = showAllGebieden ? 'var(--blaze)' : '';
-    renderAllGebiedenOverlay();
-    toast(showAllGebieden ? 'Alle jachtgebieden zichtbaar' : 'Enkel actief jachtgebied getoond');
-  });
 
   function renderBoundary() {
     if (boundaryLayer) { map.removeLayer(boundaryLayer); boundaryLayer = null; }
     const g = getActiveGebied();
-    document.getElementById('gebiedNameDisplay').textContent = g ? (g.name + (g.locked ? ' 🔒' : '')) : 'Geen jachtgebied';
+    document.getElementById('gebiedNameDisplay').innerHTML = escapeHtmlEarly(g ? (g.name + (g.locked ? ' 🔒' : '')) : 'Geen jachtgebied') + ' <span style="font-size:11px;opacity:.75;">▾</span>';
     if (!boundaryLatLngs || boundaryLatLngs.length === 0) {
       document.getElementById('zoneLabel').textContent = 'Geen grens ingesteld';
       renderZonesList();
