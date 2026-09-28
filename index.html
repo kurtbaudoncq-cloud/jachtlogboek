@@ -1448,6 +1448,9 @@
   const tableauFormCounts = {};
   let entryMarkers = {};
   let markerMarkers = {};
+  // Kleiner formaat voor de wild-markers op de kaart, zodat een jachtgebied met
+  // veel registraties (bv. na een KML-import) niet helemaal wordt bedekt.
+  const markerSizePx = 20;
   let pendingPhotoBlob = null;
   let pendingCoords = null;
   let selectedSpecies = null;
@@ -3041,11 +3044,11 @@
     const col = yearColor(entryYear(entry));
     const subtypeSym = entry.subtype ? subtypeSymbol(entry.subtype) : '';
     const badgeHtml = subtypeSym
-      ? '<span style="position:absolute;bottom:-3px;right:-3px;background:#fff;color:' + col + ';border:1.5px solid ' + col + ';border-radius:50%;width:14px;height:14px;font-size:10px;font-weight:700;line-height:13px;text-align:center;transform:rotate(45deg);">' + subtypeSym + '</span>'
+      ? '<span style="position:absolute;bottom:-2px;right:-2px;background:#fff;color:' + col + ';border:1px solid ' + col + ';border-radius:50%;width:9px;height:9px;font-size:7px;font-weight:700;line-height:8px;text-align:center;transform:rotate(45deg);">' + subtypeSym + '</span>'
       : '';
     const icon = L.divIcon({
-      html: '<div style="position:relative;background:' + col + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px;">' + speciesEmoji(entry.species) + '</span>' + badgeHtml + '</div>',
-      className:'', iconSize:[30,30], iconAnchor:[15,28]
+      html: '<div style="position:relative;background:' + col + ';border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);width:' + markerSizePx + 'px;height:' + markerSizePx + 'px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:' + Math.round(markerSizePx * 0.34) + 'px;">' + speciesEmoji(entry.species) + '</span>' + badgeHtml + '</div>',
+      className:'', iconSize:[markerSizePx,markerSizePx], iconAnchor:[Math.round(markerSizePx/2), Math.round(markerSizePx*0.93)]
     });
     const marker = L.marker([entry.lat, entry.lng], { icon, draggable: false }).addTo(map);
     const subtypeLabelStr = entry.subtype ? ' · ' + subtypeDisplay(entry.subtype) : '';
