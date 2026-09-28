@@ -447,7 +447,10 @@
     </div>
 
     <div id="authStepGroups" style="display:none;">
-      <h2 style="margin-bottom:4px;">Kies je jachtgebied</h2>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+        <h2 style="margin-bottom:4px;">Kies je jachtgebied</h2>
+        <button class="icon-btn" id="btnCloseAuthGroups" style="display:none;flex-shrink:0;" title="Sluiten">✕</button>
+      </div>
       <div class="hint" style="color:var(--parchment-dim);margin-bottom:12px;">Elk jachtgebied heeft zijn eigen jachtmaats. Kies hieronder in welk jachtgebied je nu wil werken.</div>
       <div id="authGroupsList"></div>
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.15);">
