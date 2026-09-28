@@ -393,7 +393,22 @@
 <div id="authOverlay" style="position:fixed;inset:0;z-index:5000;background:var(--forest-900);color:var(--parchment);display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;">
   <div style="width:100%;max-width:380px;">
     <div style="text-align:center;margin-bottom:22px;">
-      <div style="font-size:34px;">🌲</div>
+      <svg width="84" height="62" viewBox="0 0 84 62" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto;">
+        <g stroke="#e8c37a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M42 58 L42 30"/>
+          <path d="M42 30 L20 8"/>
+          <path d="M28 16 L16 12"/>
+          <path d="M32 24 L20 22"/>
+          <path d="M20 8 L20 2"/>
+          <path d="M20 8 L14 4"/>
+          <path d="M42 30 L64 8"/>
+          <path d="M56 16 L68 12"/>
+          <path d="M52 24 L64 22"/>
+          <path d="M64 8 L64 2"/>
+          <path d="M64 8 L70 4"/>
+        </g>
+        <circle cx="42" cy="30" r="3.4" fill="#e8c37a"/>
+      </svg>
       <h1 style="color:#e8c37a;font-size:24px;margin:6px 0 2px;">Jachtlogboek</h1>
       <div style="color:var(--parchment-dim);font-size:13px;">Gedeeld jachtbeheer in de cloud</div>
     </div>
@@ -569,7 +584,7 @@
       <button class="menu-item" data-open="markers"><span class="emoji">📍</span><span class="col">Markeringen<div class="sub">Hoogzit, voederplaats, parking, ...</div></span></button>
       <button class="menu-item" data-open="tracks"><span class="emoji">🥾</span><span class="col">Sporen<div class="sub">Bewaarde looproutes</div></span></button>
       <button class="menu-item" data-open="weather"><span class="emoji">☀️</span><span class="col">Weer &amp; zon/maan<div class="sub">Beste momenten om te jagen</div></span></button>
-      <button class="menu-item" data-open="boundary"><span class="emoji">📐</span><span class="col">Jachtgebied grens<div class="sub">Tekenen of importeren</div></span></button>
+      <button class="menu-item" data-open="boundary"><span class="emoji">📐</span><span class="col">Jachtgebied beheer<div class="sub">Grens, delen en leden</div></span></button>
       <button class="menu-item" data-open="tableau"><span class="emoji">📊</span><span class="col">Afschot / Tableau<div class="sub">Aantallen per soort</div></span></button>
       <button class="menu-item" data-open="data"><span class="emoji">⇅</span><span class="col">Data<div class="sub">Back-up maken of terugzetten</div></span></button>
     </div>
@@ -579,8 +594,10 @@
   <div class="sheet" id="sheetBoundary">
     <div class="sheet-handle"></div>
     <div class="back-row" style="justify-content:space-between;"><button class="icon-btn" data-back>←</button><button class="icon-btn sheet-close-x">✕</button></div>
-    <h2>Jachtgebied grens</h2>
-    <div class="subtitle">Teken de grens zelf, of importeer een bestaand plan.</div>
+    <h2>Jachtgebied beheer</h2>
+    <div class="subtitle">Grens, delen en leden — alles voor dit jachtgebied op één plek.</div>
+    <div id="gebiedShareSection" style="margin-bottom:10px;"></div>
+    <div class="divider"></div>
     <div class="field" id="gebiedSelectField" style="display:none;">
       <label>Actief jachtgebied (geavanceerd — meerdere in 1 groep)</label>
       <select id="gebiedSelect"></select>
@@ -912,6 +929,7 @@
   let currentGroupId = null;
   let currentGroupName = '';
   let currentGroupRole = null;
+  let currentGroupInviteCode = null;
 
   /* ---------- Uitnodigingscode uit WhatsApp-link (?invite=CODE) ---------- */
   (function capturePendingInvite() {
@@ -1170,11 +1188,43 @@
     currentGroupId = groupId;
     currentGroupName = groupName;
     currentGroupRole = role;
+    currentGroupInviteCode = null;
     localStorage.setItem('jlb_lastGroupId', groupId);
     document.getElementById('authOverlay').style.display = 'none';
     const lbl = document.getElementById('accountInfoSub');
     if (lbl) lbl.textContent = groupName + ' (' + (role === 'admin' ? 'admin' : 'lid') + ') · ' + (currentUser ? currentUser.email : '');
+    if (role === 'admin') {
+      sb.from('groups').select('invite_code').eq('id', groupId).single().then(({ data }) => {
+        if (data) currentGroupInviteCode = data.invite_code;
+        renderGebiedShareSection();
+      });
+    }
     await startApp();
+  }
+  function renderGebiedShareSection() {
+    const el = document.getElementById('gebiedShareSection');
+    if (!el) return;
+    const gebiedNaam = (getActiveGebied() && getActiveGebied().name) || currentGroupName || 'dit jachtgebied';
+    let html = '<div class="hint" style="margin-bottom:8px;">Delen &amp; leden</div>';
+    if (currentGroupRole === 'admin') {
+      html += '<div class="btn-row" style="margin-bottom:8px;">' +
+        '<button class="btn btn-outline" id="btnShareInviteWa">📲 Uitnodigen via WhatsApp</button>' +
+        '<button class="btn btn-outline" id="btnShareMembers">👥 Leden</button>' +
+      '</div>' +
+      (currentGroupInviteCode ? '<div class="hint" style="margin-bottom:4px;">Uitnodigingscode: ' + escapeHtmlEarly(currentGroupInviteCode) + '</div>' : '');
+    } else {
+      html += '<div class="btn-row" style="margin-bottom:8px;"><button class="btn btn-outline" id="btnShareMembers">👥 Leden</button></div>' +
+        '<div class="hint" style="margin-bottom:4px;">Enkel een admin van dit jachtgebied kan nieuwe mensen uitnodigen.</div>';
+    }
+    el.innerHTML = html;
+    const waBtn = document.getElementById('btnShareInviteWa');
+    if (waBtn) waBtn.addEventListener('click', () => {
+      if (!currentGroupInviteCode) { toast('Uitnodigingscode nog aan het laden — probeer straks opnieuw'); return; }
+      inviteViaWhatsapp(gebiedNaam, currentGroupInviteCode);
+    });
+    document.getElementById('btnShareMembers').addEventListener('click', () => {
+      openMembersOverlay(currentGroupId, currentGroupName);
+    });
   }
 
   async function openGroupSwitcher() {
@@ -1599,7 +1649,7 @@
       else if (target === 'markers') { renderMarkersList(); openSheet('markers'); }
       else if (target === 'tracks') { renderTracksList(); openSheet('tracks'); }
       else if (target === 'weather') { openSheet('weather'); loadWeatherPanel(); }
-      else if (target === 'boundary') { openSheet('boundary'); }
+      else if (target === 'boundary') { openSheet('boundary'); renderGebiedShareSection(); }
       else if (target === 'tableau') { openSheet('tableau'); renderTableau(); }
       else if (target === 'data') { openSheet('data'); updateSyncStatusUi(); }
     });
@@ -3440,6 +3490,66 @@
       });
     });
   }
+
+  /* ---------- Jaarverslag afschotplan → Excel ---------- */
+  function computeYearlyAfschotData() {
+    // Zelfde opbouw als renderTableauYearly(): combineert individuele
+    // wildregistraties en ingevoerde tableaus (jachtdagen), per kalenderjaar.
+    const yearData = {};
+    function addToYear(year, sp, n) {
+      if (!yearData[year]) yearData[year] = { total: 0, species: {} };
+      yearData[year].total += n;
+      yearData[year].species[sp] = (yearData[year].species[sp] || 0) + n;
+    }
+    entries.forEach(en => addToYear(entryYear(en), en.species, 1));
+    tableaus.forEach(t => {
+      const y = new Date(t.date).getFullYear();
+      Object.keys(t.counts || {}).forEach(sp => addToYear(y, sp, t.counts[sp]));
+    });
+    return yearData;
+  }
+
+  document.getElementById('btnExportJaarverslag').addEventListener('click', () => {
+    if (typeof XLSX === 'undefined') { toast('Kon Excel-export niet laden — controleer je internetverbinding'); return; }
+    const yearData = computeYearlyAfschotData();
+    const years = Object.keys(yearData).map(Number).sort((a, b) => a - b);
+    if (years.length === 0) { toast('Nog geen wild geregistreerd om te exporteren'); return; }
+
+    // Blad 1: lange tabel Jaar / Soort / Aantal — handig om zelf te filteren of te draaien in Excel.
+    const detailRows = [['Jaar', 'Soort', 'Aantal']];
+    years.forEach(y => {
+      Object.keys(yearData[y].species).sort((a, b) => yearData[y].species[b] - yearData[y].species[a]).forEach(sp => {
+        detailRows.push([y, sp, yearData[y].species[sp]]);
+      });
+    });
+    const wsDetail = XLSX.utils.aoa_to_sheet(detailRows);
+    wsDetail['!cols'] = [{ wch:8 }, { wch:22 }, { wch:10 }];
+
+    // Blad 2: kruistabel Soort x Jaar, meteen overzichtelijk per soort en per jaar.
+    const allSpecies = Array.from(new Set(years.flatMap(y => Object.keys(yearData[y].species)))).sort();
+    const crossHeader = ['Soort'].concat(years.map(String)).concat(['Totaal']);
+    const crossRows = [crossHeader];
+    allSpecies.forEach(sp => {
+      const row = [sp];
+      let rowTotal = 0;
+      years.forEach(y => { const n = yearData[y].species[sp] || 0; row.push(n); rowTotal += n; });
+      row.push(rowTotal);
+      crossRows.push(row);
+    });
+    const totalsRow = ['Totaal'].concat(years.map(y => yearData[y].total)).concat([years.reduce((a, y) => a + yearData[y].total, 0)]);
+    crossRows.push(totalsRow);
+    const wsCross = XLSX.utils.aoa_to_sheet(crossRows);
+    wsCross['!cols'] = [{ wch:22 }].concat(years.map(() => ({ wch:9 }))).concat([{ wch:10 }]);
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsCross, 'Soort x Jaar');
+    XLSX.utils.book_append_sheet(wb, wsDetail, 'Detail');
+
+    const gebiedNaam = (getActiveGebied() && getActiveGebied().name) || 'Jachtgebied';
+    const safeName = gebiedNaam.replace(/[^a-z0-9]+/gi, '_');
+    XLSX.writeFile(wb, 'Jaarverslag_' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+    toast('Jaarverslag geëxporteerd naar Excel');
+  });
 
   function renderWildList() {
     renderWildYearFilterChips();
