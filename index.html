@@ -565,16 +565,6 @@
 
   <div class="toast" id="toast"></div>
 
-  <div class="modal-overlay" id="confirmModalOverlay" style="display:none;">
-    <div class="modal-box">
-      <div id="confirmModalMessage" style="margin-bottom:18px; font-size:15px; line-height:1.45; color:var(--ink); white-space:pre-line;"></div>
-      <div class="btn-row">
-        <button class="btn btn-ghost" id="confirmModalCancel">Annuleren</button>
-        <button class="btn" id="confirmModalOk" style="background:var(--danger); color:#fff; flex:1;">Bevestigen</button>
-      </div>
-    </div>
-  </div>
-
   <div class="sheet-overlay" id="overlay"></div>
 
   <!-- MAIN MENU -->
@@ -917,6 +907,16 @@
     </div>
   </div>
 
+</div>
+
+<div class="modal-overlay" id="confirmModalOverlay" style="display:none;">
+  <div class="modal-box">
+    <div id="confirmModalMessage" style="margin-bottom:18px; font-size:15px; line-height:1.45; color:var(--ink); white-space:pre-line;"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="confirmModalCancel">Annuleren</button>
+      <button class="btn" id="confirmModalOk" style="background:var(--danger); color:#fff; flex:1;">Bevestigen</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
