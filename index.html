@@ -451,7 +451,7 @@
     <div id="authStepGroups" style="display:none;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
         <h2 style="margin-bottom:4px;">Kies je jachtgebied</h2>
-        <button class="icon-btn" id="btnCloseAuthGroups" style="display:none;flex-shrink:0;" title="Sluiten">✕</button>
+        <button class="icon-btn" id="btnCloseAuthGroups" style="flex-shrink:0;" title="Sluiten">✕</button>
       </div>
       <div class="hint" style="color:var(--parchment-dim);margin-bottom:12px;">Elk jachtgebied heeft zijn eigen jachtmaats. Kies hieronder in welk jachtgebied je nu wil werken.</div>
       <div id="authGroupsList"></div>
@@ -472,8 +472,11 @@
 
 <div id="membersOverlay" style="position:fixed;inset:0;z-index:5100;background:rgba(16,28,19,.85);display:none;align-items:center;justify-content:center;padding:24px;" onclick="if(event.target===this){this.style.display='none';}">
   <div style="width:100%;max-width:400px;max-height:80vh;overflow-y:auto;background:var(--forest-900);border-radius:16px;padding:20px;color:var(--parchment);">
-    <h2 style="margin-bottom:2px;" id="membersGroupName">Leden</h2>
-    <div class="hint" style="color:var(--parchment-dim);margin-bottom:14px;">Jachtmaats in dit jachtgebied. Als admin kan je een lid verwijderen. Tik naast dit venster (op de donkere achtergrond) om te sluiten.</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+      <h2 style="margin-bottom:2px;" id="membersGroupName">Leden</h2>
+      <button class="icon-btn" onclick="document.getElementById('membersOverlay').style.display='none';" style="flex-shrink:0;" title="Sluiten">✕</button>
+    </div>
+    <div class="hint" style="color:var(--parchment-dim);margin-bottom:14px;">Jachtmaats in dit jachtgebied. Als admin kan je een lid verwijderen.</div>
     <div id="membersList"></div>
     <button class="btn btn-outline" id="btnCloseMembers" onclick="document.getElementById('membersOverlay').style.display='none';" style="margin-top:16px;">Sluiten</button>
   </div>
@@ -1003,6 +1006,7 @@
     showAuthStep('Login');
   });
   document.getElementById('btnCloseAuthGroups').addEventListener('click', () => {
+    if (!currentGroupId) { toast('Kies eerst een jachtgebied, of maak er een aan.'); return; }
     document.getElementById('authOverlay').style.display = 'none';
   });
 
@@ -1178,9 +1182,7 @@
     }
     renderGroupsList(data);
     authMsg('');
-    // Enkel een sluitknop tonen als je al effectief in een jachtgebied zat (dit scherm
-    // dus via de account-/ledenknoppen geopend werd) — niet bij de verplichte eerste keuze.
-    document.getElementById('btnCloseAuthGroups').style.display = (appStarted && currentGroupId) ? '' : 'none';
+    document.getElementById('btnCloseAuthGroups').style.display = '';
     showAuthStep('Groups');
   }
 
