@@ -470,12 +470,12 @@
   </div>
 </div>
 
-<div id="membersOverlay" style="position:fixed;inset:0;z-index:5100;background:rgba(16,28,19,.85);display:none;align-items:center;justify-content:center;padding:24px;">
+<div id="membersOverlay" style="position:fixed;inset:0;z-index:5100;background:rgba(16,28,19,.85);display:none;align-items:center;justify-content:center;padding:24px;" onclick="if(event.target===this){this.style.display='none';}">
   <div style="width:100%;max-width:400px;max-height:80vh;overflow-y:auto;background:var(--forest-900);border-radius:16px;padding:20px;color:var(--parchment);">
     <h2 style="margin-bottom:2px;" id="membersGroupName">Leden</h2>
-    <div class="hint" style="color:var(--parchment-dim);margin-bottom:14px;">Jachtmaats in dit jachtgebied. Als admin kan je een lid verwijderen.</div>
+    <div class="hint" style="color:var(--parchment-dim);margin-bottom:14px;">Jachtmaats in dit jachtgebied. Als admin kan je een lid verwijderen. Tik naast dit venster (op de donkere achtergrond) om te sluiten.</div>
     <div id="membersList"></div>
-    <button class="btn btn-outline" id="btnCloseMembers" style="margin-top:16px;">Sluiten</button>
+    <button class="btn btn-outline" id="btnCloseMembers" onclick="document.getElementById('membersOverlay').style.display='none';" style="margin-top:16px;">Sluiten</button>
   </div>
 </div>
 
@@ -1093,7 +1093,22 @@
     document.getElementById('membersOverlay').style.display = 'flex';
     await renderMembersList(groupId, groupName);
   }
-  let membersListDelegateBound = false;
+  window.jlbDeleteMember = async function(btn) {
+    try {
+      const listEl = document.getElementById('membersList');
+      const gid = listEl.dataset.groupId;
+      const gname = listEl.dataset.groupName;
+      const userId = btn.getAttribute('data-user-id');
+      const naam = btn.getAttribute('data-naam');
+      if (!(await appConfirm('"' + naam + '" verwijderen uit "' + gname + '"? Deze persoon verliest toegang tot dit jachtgebied.'))) return;
+      const { error: delErr } = await sb.from('group_members').delete().eq('group_id', gid).eq('user_id', userId);
+      if (delErr) { toast('Kon lid niet verwijderen: ' + delErr.message); return; }
+      toast('"' + naam + '" verwijderd uit "' + gname + '"');
+      await renderMembersList(gid, gname);
+    } catch (e) {
+      toast('Onverwachte fout bij verwijderen: ' + (e && e.message ? e.message : e));
+    }
+  };
   async function renderMembersList(groupId, groupName) {
     const listEl = document.getElementById('membersList');
     const { data, error } = await sb
@@ -1104,37 +1119,17 @@
     if (error) { listEl.innerHTML = '<div class="hint" style="color:#f2b8b8;">Kon leden niet laden: ' + escapeHtmlEarly(error.message) + '</div>'; return; }
     if (!data || data.length === 0) { listEl.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Geen leden gevonden.</div>'; return; }
     const viewerIsAdmin = data.some(m => m.user_id === (currentUser && currentUser.id) && m.role === 'admin');
+    listEl.dataset.groupId = groupId;
+    listEl.dataset.groupName = groupName;
     listEl.innerHTML = data.map(m => {
       const naam = (m.profiles && (m.profiles.display_name || m.profiles.email)) || 'Onbekend lid';
       const isSelf = m.user_id === currentUser.id;
       return '<div class="list-card" style="cursor:default;">' +
         '<div class="info"><div class="top"><span class="title">' + escapeHtmlEarly(naam) + (isSelf ? ' (jij)' : '') + '</span></div>' +
         '<div class="meta">' + (m.role === 'admin' ? 'Admin' : 'Lid') + '</div></div>' +
-        (m.role !== 'admin' && viewerIsAdmin ? '<button type="button" class="btn btn-danger btn-remove-member" data-user-id="' + m.user_id + '" data-naam="' + escapeHtmlEarly(naam) + '" title="Lid verwijderen" style="width:36px;height:36px;padding:0;border-radius:50%;flex:0 0 auto;">🗑️</button>' : '') +
+        (m.role !== 'admin' && viewerIsAdmin ? '<button type="button" class="btn btn-danger btn-remove-member" onclick="jlbDeleteMember(this)" data-user-id="' + m.user_id + '" data-naam="' + escapeHtmlEarly(naam) + '" title="Lid verwijderen" style="width:36px;height:36px;padding:0;border-radius:50%;flex:0 0 auto;">🗑️</button>' : '') +
       '</div>';
     }).join('');
-    listEl.dataset.groupId = groupId;
-    listEl.dataset.groupName = groupName;
-    if (!membersListDelegateBound) {
-      membersListDelegateBound = true;
-      listEl.addEventListener('click', async (ev) => {
-        const btn = ev.target.closest('.btn-remove-member');
-        if (!btn || !listEl.contains(btn)) return;
-        try {
-          const gid = listEl.dataset.groupId;
-          const gname = listEl.dataset.groupName;
-          const userId = btn.getAttribute('data-user-id');
-          const naam = btn.getAttribute('data-naam');
-          if (!(await appConfirm('"' + naam + '" verwijderen uit "' + gname + '"? Deze persoon verliest toegang tot dit jachtgebied.'))) return;
-          const { error: delErr } = await sb.from('group_members').delete().eq('group_id', gid).eq('user_id', userId);
-          if (delErr) { toast('Kon lid niet verwijderen: ' + delErr.message); return; }
-          toast('"' + naam + '" verwijderd uit "' + gname + '"');
-          await renderMembersList(gid, gname);
-        } catch (e) {
-          toast('Onverwachte fout bij verwijderen: ' + (e && e.message ? e.message : e));
-        }
-      });
-    }
   }
   document.getElementById('btnCloseMembers').addEventListener('click', () => {
     document.getElementById('membersOverlay').style.display = 'none';
