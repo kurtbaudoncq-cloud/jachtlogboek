@@ -451,7 +451,7 @@
     <div id="authStepGroups" style="display:none;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
         <h2 style="margin-bottom:4px;">Kies je jachtgebied</h2>
-        <button class="icon-btn" id="btnCloseAuthGroups" style="flex-shrink:0;" title="Sluiten">✕</button>
+        <button class="icon-btn" id="btnCloseAuthGroups" onclick="document.getElementById('authOverlay').style.display='none';" style="flex-shrink:0;" title="Sluiten">✕</button>
       </div>
       <div class="hint" style="color:var(--parchment-dim);margin-bottom:12px;">Elk jachtgebied heeft zijn eigen jachtmaats. Kies hieronder in welk jachtgebied je nu wil werken.</div>
       <div id="authGroupsList"></div>
@@ -1006,7 +1006,6 @@
     showAuthStep('Login');
   });
   document.getElementById('btnCloseAuthGroups').addEventListener('click', () => {
-    if (!currentGroupId) { toast('Kies eerst een jachtgebied, of maak er een aan.'); return; }
     document.getElementById('authOverlay').style.display = 'none';
   });
 
