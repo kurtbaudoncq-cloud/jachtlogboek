@@ -145,7 +145,7 @@
   .search-result:active{ background:var(--parchment-dim); }
 
   .modal-overlay{
-    position:fixed; inset:0; background:rgba(16,20,14,.55); z-index:2000;
+    position:fixed; inset:0; background:rgba(16,20,14,.55); z-index:6000;
     display:flex; align-items:center; justify-content:center; padding:24px;
   }
   .modal-box{
@@ -266,6 +266,8 @@
   .list-card .info .note{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #authGroupsList .list-card .info .title{ color:var(--ink); }
   #authGroupsList .list-card .info .meta{ color:var(--ink-soft); }
+  #membersList .list-card .info .title{ color:var(--ink); }
+  #membersList .list-card .info .meta{ color:var(--ink-soft); }
   .btn-invite-wa{
     width:36px; height:36px; padding:0; flex:0 0 auto; border-radius:50%;
     font-size:17px; line-height:1; margin-left:0 !important;
@@ -1000,6 +1002,9 @@
     document.getElementById('loginEmail').value = ''; document.getElementById('loginPassword').value = '';
     showAuthStep('Login');
   });
+  document.getElementById('btnCloseAuthGroups').addEventListener('click', () => {
+    document.getElementById('authOverlay').style.display = 'none';
+  });
 
   document.getElementById('btnDoLogin').addEventListener('click', async () => {
     const email = document.getElementById('loginEmail').value.trim();
@@ -1165,6 +1170,9 @@
     }
     renderGroupsList(data);
     authMsg('');
+    // Enkel een sluitknop tonen als je al effectief in een jachtgebied zat (dit scherm
+    // dus via de account-/ledenknoppen geopend werd) — niet bij de verplichte eerste keuze.
+    document.getElementById('btnCloseAuthGroups').style.display = (appStarted && currentGroupId) ? '' : 'none';
     showAuthStep('Groups');
   }
 
