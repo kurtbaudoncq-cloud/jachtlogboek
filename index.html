@@ -1093,6 +1093,7 @@
     document.getElementById('membersOverlay').style.display = 'flex';
     await renderMembersList(groupId, groupName);
   }
+  let membersListDelegateBound = false;
   async function renderMembersList(groupId, groupName) {
     const listEl = document.getElementById('membersList');
     const { data, error } = await sb
@@ -1102,26 +1103,38 @@
       .order('role', { ascending: true });
     if (error) { listEl.innerHTML = '<div class="hint" style="color:#f2b8b8;">Kon leden niet laden: ' + escapeHtmlEarly(error.message) + '</div>'; return; }
     if (!data || data.length === 0) { listEl.innerHTML = '<div class="hint" style="color:var(--parchment-dim);">Geen leden gevonden.</div>'; return; }
+    const viewerIsAdmin = data.some(m => m.user_id === (currentUser && currentUser.id) && m.role === 'admin');
     listEl.innerHTML = data.map(m => {
       const naam = (m.profiles && (m.profiles.display_name || m.profiles.email)) || 'Onbekend lid';
       const isSelf = m.user_id === currentUser.id;
       return '<div class="list-card" style="cursor:default;">' +
         '<div class="info"><div class="top"><span class="title">' + escapeHtmlEarly(naam) + (isSelf ? ' (jij)' : '') + '</span></div>' +
         '<div class="meta">' + (m.role === 'admin' ? 'Admin' : 'Lid') + '</div></div>' +
-        (m.role !== 'admin' ? '<button type="button" class="btn btn-danger btn-remove-member" data-user-id="' + m.user_id + '" data-naam="' + escapeHtmlEarly(naam) + '" title="Lid verwijderen" style="width:36px;height:36px;padding:0;border-radius:50%;flex:0 0 auto;">🗑️</button>' : '') +
+        (m.role !== 'admin' && viewerIsAdmin ? '<button type="button" class="btn btn-danger btn-remove-member" data-user-id="' + m.user_id + '" data-naam="' + escapeHtmlEarly(naam) + '" title="Lid verwijderen" style="width:36px;height:36px;padding:0;border-radius:50%;flex:0 0 auto;">🗑️</button>' : '') +
       '</div>';
     }).join('');
-    listEl.querySelectorAll('.btn-remove-member').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const userId = btn.getAttribute('data-user-id');
-        const naam = btn.getAttribute('data-naam');
-        if (!(await appConfirm('"' + naam + '" verwijderen uit "' + groupName + '"? Deze persoon verliest toegang tot dit jachtgebied.'))) return;
-        const { error: delErr } = await sb.from('group_members').delete().eq('group_id', groupId).eq('user_id', userId);
-        if (delErr) { toast('Kon lid niet verwijderen: ' + delErr.message); return; }
-        toast('"' + naam + '" verwijderd uit "' + groupName + '"');
-        await renderMembersList(groupId, groupName);
+    listEl.dataset.groupId = groupId;
+    listEl.dataset.groupName = groupName;
+    if (!membersListDelegateBound) {
+      membersListDelegateBound = true;
+      listEl.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('.btn-remove-member');
+        if (!btn || !listEl.contains(btn)) return;
+        try {
+          const gid = listEl.dataset.groupId;
+          const gname = listEl.dataset.groupName;
+          const userId = btn.getAttribute('data-user-id');
+          const naam = btn.getAttribute('data-naam');
+          if (!(await appConfirm('"' + naam + '" verwijderen uit "' + gname + '"? Deze persoon verliest toegang tot dit jachtgebied.'))) return;
+          const { error: delErr } = await sb.from('group_members').delete().eq('group_id', gid).eq('user_id', userId);
+          if (delErr) { toast('Kon lid niet verwijderen: ' + delErr.message); return; }
+          toast('"' + naam + '" verwijderd uit "' + gname + '"');
+          await renderMembersList(gid, gname);
+        } catch (e) {
+          toast('Onverwachte fout bij verwijderen: ' + (e && e.message ? e.message : e));
+        }
       });
-    });
+    }
   }
   document.getElementById('btnCloseMembers').addEventListener('click', () => {
     document.getElementById('membersOverlay').style.display = 'none';
