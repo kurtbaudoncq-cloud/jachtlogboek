@@ -713,7 +713,7 @@
     <div class="field photo-area">
       <label>Foto</label>
       <div id="photoDrop" class="photo-drop">📷 Foto toevoegen (camera of bestand)</div>
-      <input type="file" id="filePhoto" class="file-hidden" accept="image/*" capture="environment">
+      <input type="file" id="filePhoto" class="file-hidden" accept="image/*">
     </div>
 
     <div class="field">
@@ -907,7 +907,7 @@
     <div class="field photo-area">
       <label>Foto (optioneel)</label>
       <div id="tableauPhotoDrop" class="photo-drop">📷 Foto toevoegen (bv. groepsfoto van het tableau)</div>
-      <input type="file" id="tableauFilePhoto" class="file-hidden" accept="image/*" capture="environment">
+      <input type="file" id="tableauFilePhoto" class="file-hidden" accept="image/*">
     </div>
     <div class="field">
       <label>Notitie (optioneel)</label>
@@ -3033,13 +3033,14 @@
 
   const photoDrop = document.getElementById('photoDrop');
   const filePhoto = document.getElementById('filePhoto');
-  function resetPhotoUi() { photoDrop.className = 'photo-drop'; photoDrop.innerHTML = '📷 Foto toevoegen (camera of bestand)'; }
+  function resetPhotoUi() { photoDrop.className = 'photo-drop'; photoDrop.innerHTML = '📷 Foto toevoegen (camera of bestand)'; filePhoto.value = ''; }
   photoDrop.addEventListener('click', () => filePhoto.click());
   filePhoto.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     photoDrop.innerHTML = '📷 Foto wordt verkleind...';
     pendingPhotoBlob = await compressImage(file);
+    filePhoto.value = '';
     editingEntryPhotoCleared = false;
     const url = URL.createObjectURL(pendingPhotoBlob);
     photoDrop.className = 'photo-preview';
@@ -3325,13 +3326,14 @@
   let pendingTableauPhotoBlob = null;
   const tableauPhotoDrop = document.getElementById('tableauPhotoDrop');
   const tableauFilePhoto = document.getElementById('tableauFilePhoto');
-  function resetTableauPhotoUi() { tableauPhotoDrop.className = 'photo-drop'; tableauPhotoDrop.innerHTML = '📷 Foto toevoegen (bv. groepsfoto van het tableau)'; }
+  function resetTableauPhotoUi() { tableauPhotoDrop.className = 'photo-drop'; tableauPhotoDrop.innerHTML = '📷 Foto toevoegen (bv. groepsfoto van het tableau)'; tableauFilePhoto.value = ''; }
   tableauPhotoDrop.addEventListener('click', () => tableauFilePhoto.click());
   tableauFilePhoto.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     tableauPhotoDrop.innerHTML = '📷 Foto wordt verkleind...';
     pendingTableauPhotoBlob = await compressImage(file);
+    tableauFilePhoto.value = '';
     const url = URL.createObjectURL(pendingTableauPhotoBlob);
     tableauPhotoDrop.className = 'photo-preview';
     tableauPhotoDrop.innerHTML = '<img src="' + url + '"><button class="remove" type="button">✕</button>';
