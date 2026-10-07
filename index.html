@@ -111,11 +111,14 @@
   .wind-card{
     position:absolute; top:calc(70px + var(--safe-top)); right:12px; z-index:600;
     background:rgba(16,28,19,.94); color:var(--parchment); border:1px solid var(--forest-600);
-    border-radius:14px; padding:10px 14px; display:flex; align-items:center; gap:10px;
+    border-radius:14px; padding:10px 14px; display:flex; flex-direction:column; gap:8px;
     box-shadow:0 4px 14px rgba(0,0,0,.3);
   }
   .wind-card.show{ display:flex !important; }
-  .wind-arrow{ font-size:30px; line-height:1; display:inline-block; transition:transform .4s ease; }
+  .weather-row{ display:flex; align-items:center; gap:10px; }
+  .weather-row + .weather-row{ padding-top:8px; border-top:1px solid rgba(255,255,255,.12); }
+  .weather-icon{ font-size:26px; line-height:1; width:30px; text-align:center; flex-shrink:0; }
+  .wind-arrow{ font-size:30px; line-height:1; display:inline-block; transition:transform .4s ease; width:30px; text-align:center; flex-shrink:0; }
   .wind-text{ display:flex; flex-direction:column; line-height:1.25; }
   .wind-text strong{ font-size:15px; transition:color .3s ease; }
   .wind-text span{ font-size:11px; color:var(--parchment-dim); }
@@ -532,16 +535,25 @@
   <div class="float-stack">
     <button class="float-btn" id="btnLayer" title="Kaartlaag wisselen">🛰️</button>
     <button class="float-btn" id="btnLocate" title="Mijn locatie">◎</button>
-    <button class="float-btn" id="btnWind" title="Windrichting">🧭</button>
+    <button class="float-btn" id="btnWind" title="Weer &amp; wind">🧭</button>
   </div>
 
   <div class="wind-card" id="windCard" style="display:none;">
-    <span class="wind-arrow" id="windArrow">↑</span>
-    <div class="wind-text">
-      <strong id="windSpeedText">–</strong>
-      <span id="windDirText">–</span>
-      <div class="wind-scale">
-        <div class="wind-scale-marker" id="windScaleMarker"></div>
+    <div class="weather-row">
+      <span class="weather-icon" id="weatherMiniIcon">🌡️</span>
+      <div class="wind-text">
+        <strong id="weatherMiniTemp">–°C</strong>
+        <span id="weatherMiniDesc">–</span>
+      </div>
+    </div>
+    <div class="weather-row">
+      <span class="wind-arrow" id="windArrow">↑</span>
+      <div class="wind-text">
+        <strong id="windSpeedText">–</strong>
+        <span id="windDirText">–</span>
+        <div class="wind-scale">
+          <div class="wind-scale-marker" id="windScaleMarker"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1272,31 +1284,46 @@
   function idbTx(storeName, mode) {
     return dbPromise.then(db => db.transaction(storeName, mode).objectStore(storeName));
   }
-  function idbAdd(storeName, value) {
-    return idbTx(storeName, "readwrite").then(store => new Promise((res, rej) => {
-      const r = store.add(value);
+  // Sommige browsers (vooral Safari op iPhone/iPad, zeker in privémodus) kunnen een foto-Blob niet
+  // in IndexedDB bewaren en geven dan een fout. Dan bewaren we de foto als tekst (data-URL) en
+  // zetten we ze bij het teruglezen weer om naar een Blob.
+  function idbWrite(storeName, op, value) {
+    const attempt = (val) => idbTx(storeName, "readwrite").then(store => new Promise((res, rej) => {
+      let r;
+      try { r = store[op](val); } catch (e) { rej(e); return; }
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
     }));
+    return attempt(value).catch(async (err) => {
+      if (value && value.photo instanceof Blob) {
+        const copy = Object.assign({}, value);
+        copy.photo = await blobToBase64(value.photo);
+        copy._photoIsStr = true;
+        return attempt(copy);
+      }
+      throw err;
+    });
   }
-  function idbPut(storeName, value) {
-    return idbTx(storeName, "readwrite").then(store => new Promise((res, rej) => {
-      const r = store.put(value);
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    }));
+  function idbRestorePhoto(rec) {
+    if (rec && rec._photoIsStr && typeof rec.photo === 'string') {
+      rec.photo = base64ToBlob(rec.photo);
+      delete rec._photoIsStr;
+    }
+    return rec;
   }
+  function idbAdd(storeName, value) { return idbWrite(storeName, 'add', value); }
+  function idbPut(storeName, value) { return idbWrite(storeName, 'put', value); }
   function idbGet(storeName, key) {
     return idbTx(storeName, "readonly").then(store => new Promise((res, rej) => {
       const r = store.get(key);
-      r.onsuccess = () => res(r.result);
+      r.onsuccess = () => res(idbRestorePhoto(r.result));
       r.onerror = () => rej(r.error);
     }));
   }
   function idbGetAll(storeName) {
     return idbTx(storeName, "readonly").then(store => new Promise((res, rej) => {
       const r = store.getAll();
-      r.onsuccess = () => res(r.result);
+      r.onsuccess = () => res((r.result || []).map(idbRestorePhoto));
       r.onerror = () => rej(r.error);
     }));
   }
@@ -2661,7 +2688,7 @@
   async function fetchAndShowWind() {
     // Reuse a very recent weather fetch (within 2 min) instead of firing a fresh request
     if (lastWindData && (Date.now() - lastWindData.at) < 2 * 60 * 1000) {
-      showWindData(lastWindData.dir, lastWindData.speed, lastWindData.lat, lastWindData.lng);
+      showWindData(lastWindData.dir, lastWindData.speed, lastWindData.lat, lastWindData.lng, lastWindData.temp, lastWindData.code);
       return;
     }
     let lat, lng;
@@ -2670,15 +2697,16 @@
     try {
       const data = await fetchOpenMeteoCurrent(lat, lng);
       const cur = data.current;
-      lastWindData = { speed: cur.wind_speed_10m, dir: cur.wind_direction_10m, lat, lng, at: Date.now() };
-      showWindData(cur.wind_direction_10m, cur.wind_speed_10m, lat, lng);
+      lastWindData = { speed: cur.wind_speed_10m, dir: cur.wind_direction_10m, temp: cur.temperature_2m, code: cur.weather_code, lat, lng, at: Date.now() };
+      showWindData(cur.wind_direction_10m, cur.wind_speed_10m, lat, lng, cur.temperature_2m, cur.weather_code);
     } catch (e) {
       document.getElementById('windSpeedText').textContent = '–';
       document.getElementById('windDirText').textContent = 'Fout: ' + (e && e.message ? e.message : String(e));
+      document.getElementById('weatherMiniDesc').textContent = 'Geen weerdata';
       console.error('Wind fetch error:', e);
     }
   }
-  function showWindData(fromDeg, speed, lat, lng) {
+  function showWindData(fromDeg, speed, lat, lng, temp, weatherCode) {
     const towardsDeg = (fromDeg + 180) % 360;
     document.getElementById('windArrow').style.transform = 'rotate(' + towardsDeg + 'deg)';
     const speedColor = windColor(speed);
@@ -2692,6 +2720,12 @@
     marker.style.background = speedColor;
     lastWindDir = fromDeg;
     lastWindSpeed = speed;
+    if (typeof temp === 'number') {
+      const [desc, icon] = wmoInfo(weatherCode);
+      document.getElementById('weatherMiniIcon').textContent = icon;
+      document.getElementById('weatherMiniTemp').textContent = Math.round(temp) + '°C';
+      document.getElementById('weatherMiniDesc').textContent = desc;
+    }
     if (windOn) renderWindGrid(fromDeg, speed);
   }
   document.getElementById('btnWind').addEventListener('click', async () => {
@@ -3016,6 +3050,10 @@
   });
 
   document.getElementById('btnSaveWild').addEventListener('click', async () => {
+    try { await saveWildEntry(); }
+    catch (e) { console.error('Wild bewaren mislukt:', e); toast('Opslaan mislukt: ' + (e && e.message ? e.message : e), 6000); }
+  });
+  async function saveWildEntry() {
     if (!pendingCoords) { toast('Wacht op GPS-positie, of kies eerst een plek op de kaart'); return; }
     const species = (document.getElementById('speciesOther').value || selectedSpecies || '').trim() || 'Onbekend';
     const note = document.getElementById('wildNote').value.trim();
@@ -3051,7 +3089,7 @@
       toast('Registratie bewaard');
       syncAllStores();
     }
-  });
+  }
 
   document.getElementById('btnDeleteWild').addEventListener('click', async () => {
     if (!editingEntryId) return;
@@ -3855,7 +3893,7 @@
     try {
       const data = await fetchOpenMeteoCurrent(lat, lng, '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=5');
       const cur = data.current;
-      lastWindData = { speed: cur.wind_speed_10m, dir: cur.wind_direction_10m, at: Date.now() };
+      lastWindData = { speed: cur.wind_speed_10m, dir: cur.wind_direction_10m, temp: cur.temperature_2m, code: cur.weather_code, lat, lng, at: Date.now() };
       const [curDesc, curIcon] = wmoInfo(cur.weather_code);
       let weatherHtml = '<div class="weather-now">' +
         '<div class="icon">' + curIcon + '</div>' +
