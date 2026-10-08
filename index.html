@@ -371,6 +371,10 @@
   .wx-chip{ flex:0 0 auto; width:42px; background:#fff; border:1px solid var(--paper-line); border-bottom:5px solid; border-radius:8px; padding:5px 0; text-align:center; font-size:12px; color:var(--ink); cursor:pointer; display:flex; flex-direction:column; gap:2px; align-items:center; }
   .wx-chip b{ font-size:10px; color:var(--ink-soft); } .wx-chip.on{ outline:2px solid var(--forest-600); background:#f4f8f0; }
 
+  #yearPop{ position:fixed; right:70px; bottom:150px; z-index:1500; max-width:calc(100vw - 90px); background:var(--parchment); border:1px solid var(--paper-line); border-radius:14px; padding:12px; box-shadow:0 6px 24px rgba(0,0,0,.35); color:var(--ink); }
+  #yearPop .yp-t{ font-size:12px; font-weight:800; margin-bottom:8px; }
+  #yearPop .chip-row{ display:flex; flex-wrap:wrap; gap:6px; }
+  .float-btn.on{ outline:3px solid var(--blaze); }
   .sun-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
   .sun-card{ background:#fff; border:1px solid var(--paper-line); border-radius:12px; padding:12px; }
   .sun-card .label{ font-size:11px; font-weight:700; color:var(--ink-soft); }
@@ -571,9 +575,12 @@
 
   <div class="float-stack">
     <button class="float-btn" id="btnLayer" title="Kaartlaag wisselen">🛰️</button>
+    <button class="float-btn" id="btnYear" title="Wild tonen per jaar">📅</button>
     <button class="float-btn" id="btnLocate" title="Mijn locatie">◎</button>
     <button class="float-btn" id="btnWind" title="Weer &amp; wind">🧭</button>
   </div>
+
+  <div id="yearPop" style="display:none;"></div>
 
   <div class="wind-card" id="windCard" style="display:none;">
     <div class="weather-row">
@@ -1636,7 +1643,8 @@
   });
   satLayer.on('tileload', () => { satTileErrorShown = false; });
 
-  L.control.zoom({ position:'bottomleft' }).addTo(map);
+  // +/- knoppen enkel op apparaten zonder aanraakscherm (op gsm zoom je met twee vingers)
+  if (!(('ontouchstart' in window) || navigator.maxTouchPoints > 0)) L.control.zoom({ position:'bottomleft' }).addTo(map);
 
   let satActive = false;
   function boundaryColor() { return satActive ? '#ffffff' : '#e11d1d'; }
@@ -3163,7 +3171,11 @@
   function entryYear(entry) { return new Date(entry.timestamp).getFullYear(); }
   function entryVisibleUnderFilter(entry) {
     const f = getWildYearFilter();
-    return f === 'all' || entryYear(entry) === parseInt(f, 10);
+    if (f === 'all') return true;
+    const cy = new Date().getFullYear();
+    if (f === 'cur') return entryYear(entry) === cy;
+    if (f === 'prev') return entryYear(entry) === cy - 1;
+    return entryYear(entry) === parseInt(f, 10);
   }
   function applyWildMapFilter() {
     entries.forEach(entry => {
@@ -3174,25 +3186,52 @@
       else if (!visible && map.hasLayer(marker)) map.removeLayer(marker);
     });
   }
+  function yearChipsHtml() {
+    const years = Array.from(new Set(entries.map(entryYear))).sort((a, b) => b - a);
+    let current = getWildYearFilter();
+    if (!['all','cur','prev'].includes(current) && !years.includes(parseInt(current, 10))) current = 'all';
+    const chip = (v, label, extra) => '<div class="chip' + (current === v ? ' active' : '') + '" data-year="' + v + '">' + (extra || '') + label + '</div>';
+    let html = chip('all', 'Alle jaren') + chip('cur', 'Dit jaar') + chip('prev', 'Vorig jaar');
+    html += years.map(y => chip(String(y), String(y), '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + yearColor(y) + ';margin-right:5px;vertical-align:middle;"></span>')).join('');
+    return html;
+  }
+  function yearFilterLabel() {
+    const f = getWildYearFilter();
+    return f === 'all' ? 'Alle jaren' : f === 'cur' ? 'Dit jaar' : f === 'prev' ? 'Vorig jaar' : f;
+  }
+  function applyYearFilter(v) {
+    setWildYearFilter(v);
+    renderWildYearFilterChips();
+    renderYearPop();
+    renderWildList();
+    applyWildMapFilter();
+  }
+  function bindYearChips(wrap) {
+    wrap.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => applyYearFilter(chip.getAttribute('data-year'))));
+  }
   function renderWildYearFilterChips() {
     const wrap = document.getElementById('wildYearFilterChips');
     if (!wrap) return;
-    const years = Array.from(new Set(entries.map(entryYear))).sort((a, b) => b - a);
-    let current = getWildYearFilter();
-    if (current !== 'all' && !years.includes(parseInt(current, 10))) current = 'all'; // bv. na verwijderen laatste registratie van dat jaar
-    let html = '<div class="chip' + (current === 'all' ? ' active' : '') + '" data-year="all">Alle jaren</div>';
-    html += years.map(y => '<div class="chip' + (current === String(y) ? ' active' : '') + '" data-year="' + y + '"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + yearColor(y) + ';margin-right:5px;vertical-align:middle;"></span>' + y + '</div>').join('');
-    wrap.innerHTML = html;
-    wrap.querySelectorAll('.chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        setWildYearFilter(chip.getAttribute('data-year'));
-        wrap.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        renderWildList();
-        applyWildMapFilter();
-      });
-    });
+    wrap.innerHTML = yearChipsHtml();
+    bindYearChips(wrap);
   }
+  function renderYearPop() {
+    const pop = document.getElementById('yearPop'), btn = document.getElementById('btnYear');
+    if (btn) btn.classList.toggle('on', getWildYearFilter() !== 'all');
+    if (btn) btn.title = 'Wild tonen: ' + yearFilterLabel();
+    if (!pop) return;
+    pop.innerHTML = '<div class="yp-t">Geschoten wild tonen op de kaart</div><div class="chip-row">' + yearChipsHtml() + '</div>';
+    bindYearChips(pop);
+  }
+  document.getElementById('btnYear').addEventListener('click', () => {
+    const pop = document.getElementById('yearPop');
+    renderYearPop();
+    pop.style.display = pop.style.display === 'block' ? 'none' : 'block';
+  });
+  document.addEventListener('click', ev => {
+    const pop = document.getElementById('yearPop');
+    if (pop && pop.style.display === 'block' && !ev.target.closest('#yearPop') && !ev.target.closest('#btnYear') && !ev.target.closest('.chip')) pop.style.display = 'none';
+  });
   function addEntryMarker(entry) {
     const col = yearColor(entryYear(entry));
     const subtypeSym = entry.subtype ? subtypeSymbol(entry.subtype) : '';
@@ -3268,6 +3307,7 @@
     const all = await idbGetAll('entries');
     entries = all.filter(e => e.gebied_id === activeGebiedId);
     entries.forEach(addEntryMarker);
+    renderYearPop();
   }
 
   /* ---------- Tableau (dagtelling kleinwild + jaaroverzicht) ---------- */
@@ -3803,8 +3843,23 @@
     const marker = L.marker([mrk.lat, mrk.lng], { icon }).addTo(map);
     let popupHtml = '<strong>' + info.label + '</strong>';
     if (mrk.note) popupHtml += '<br><em>' + escapeHtml(mrk.note) + '</em>';
-    marker.bindPopup(popupHtml);
+    const box = document.createElement('div');
+    box.innerHTML = popupHtml + '<div style="margin-top:8px;"><button type="button" style="border:1px solid #d94f04;background:#fff;color:#d94f04;border-radius:8px;padding:6px 10px;font-weight:700;font-size:13px;">🗑️ Verwijderen</button></div>';
+    box.querySelector('button').addEventListener('click', async () => { await deleteMarkerFlow(mrk.id); });
+    marker.bindPopup(box);
     markerMarkers[mrk.id] = marker;
+  }
+
+  // Verwijdert een markering (ook van een collega, elk groepslid mag dit)
+  async function deleteMarkerFlow(id) {
+    if (!(await appConfirm('Deze markering verwijderen?'))) return;
+    await idbDelete('markers', id);
+    markers = markers.filter(m => m.id !== id);
+    if (markerMarkers[id]) { map.removeLayer(markerMarkers[id]); delete markerMarkers[id]; }
+    addPendingDelete('markers', id);
+    toast('Markering verwijderd');
+    await syncAllStores();
+    if (getPendingDeletes('markers').includes(id)) toast('Lokaal verwijderd; wordt bij verbinding ook bij de anderen verwijderd', 5000);
   }
 
   async function loadMarkers() {
@@ -3844,12 +3899,7 @@
         if (markerMarkers[mrk.id]) markerMarkers[mrk.id].openPopup();
       });
       card.querySelector('[data-act=del]').addEventListener('click', async () => {
-        if (!(await appConfirm('Deze markering verwijderen?'))) return;
-        await idbDelete('markers', mrk.id);
-        markers = markers.filter(m => m.id !== mrk.id);
-        if (markerMarkers[mrk.id]) { map.removeLayer(markerMarkers[mrk.id]); delete markerMarkers[mrk.id]; }
-        addPendingDelete('markers', mrk.id);
-        syncAllStores();
+        await deleteMarkerFlow(mrk.id);
         renderMarkersList();
       });
       el.appendChild(card);
