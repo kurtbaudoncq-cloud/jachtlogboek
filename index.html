@@ -334,6 +334,43 @@
   .weather-day .t{ font-size:12px; font-weight:700; }
   .weather-day .t span{ color:var(--ink-soft); font-weight:500; }
 
+
+  /* Volledig weerbericht */
+  .wx-tabs{ display:flex; gap:6px; margin:4px 0 14px; overflow-x:auto; }
+  .wx-tabs button{ flex:1 0 auto; border:1.5px solid var(--paper-line); background:#fff; border-radius:999px; padding:8px 14px; font-size:13px; font-weight:700; color:var(--ink); font-family:inherit; cursor:pointer; }
+  .wx-tabs button.on{ background:var(--forest-600); border-color:var(--forest-600); color:#fff; }
+  .wx-arr{ display:inline-block; font-weight:800; line-height:1; }
+  .wx-day{ background:#fff; border:1px solid var(--paper-line); border-radius:12px; margin-bottom:10px; overflow:hidden; color:var(--ink); }
+  .wx-day-head{ display:grid; grid-template-columns:1fr auto; gap:4px 10px; padding:12px; cursor:pointer; }
+  .wx-day-head .dn{ font-weight:800; font-size:15px; text-transform:capitalize; }
+  .wx-day-head .dd{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
+  .wx-day-head .tt{ font-size:20px; font-weight:800; text-align:right; }
+  .wx-day-head .tt span{ color:var(--ink-soft); font-weight:600; font-size:15px; }
+  .wx-day-head .m{ grid-column:1 / -1; font-size:12.5px; color:var(--ink-soft); }
+  .wx-hours{ border-top:1px solid var(--paper-line); background:#fbf9f3; padding:4px 8px 8px; }
+  .wx-hrow{ display:grid; grid-template-columns:44px 26px 34px 1fr 92px; align-items:center; gap:6px; padding:5px 2px; font-size:13px; border-bottom:1px solid #eee6d0; }
+  .wx-hrow:last-child{ border-bottom:none; }
+  .wx-hhead{ font-size:10.5px; font-weight:700; color:var(--ink-soft); }
+  .wx-hrow .hh{ font-weight:700; } .wx-hrow .ht{ font-weight:700; }
+  .wx-hrow .hp{ position:relative; height:18px; background:#eef3f8; border-radius:4px; overflow:hidden; font-size:11px; }
+  .wx-hrow.wx-hhead .hp{ background:none; height:auto; }
+  .wx-hrow .hp i{ position:absolute; left:0; top:0; bottom:0; background:#7aa6cf; }
+  .wx-hrow .hp b{ position:relative; padding-left:4px; line-height:18px; color:var(--ink); }
+  .wx-hrow .hw{ text-align:right; white-space:nowrap; } .wx-hrow .hw small{ color:var(--ink-soft); }
+  .wx-scroll{ overflow-x:auto; background:#fff; border:1px solid var(--paper-line); border-radius:12px; padding:6px 0; margin-bottom:12px; }
+  .wx-ptitle{ position:sticky; left:0; width:calc(100vw - 70px); max-width:420px; font-size:12px; font-weight:700; color:var(--ink); padding:8px 10px 0; }
+  #wxRadarMap{ height:320px; border-radius:12px; overflow:hidden; border:1px solid var(--paper-line); background:#dfe6e9; }
+  .wx-ctl{ display:flex; align-items:center; gap:10px; margin:10px 0; color:var(--ink); font-size:13px; font-weight:700; }
+  .wx-ctl input[type=range]{ flex:1; min-width:0; }
+  .wx-windbig{ display:flex; align-items:center; gap:18px; background:#fff; border:1px solid var(--paper-line); border-radius:12px; padding:16px; color:var(--ink); }
+  .wx-bigarrow{ font-size:64px; font-weight:800; line-height:1; transition:transform .35s; display:inline-block; animation:wxPulse 1.4s ease-in-out infinite; text-shadow:0 0 3px rgba(0,0,0,.75),0 0 1px #000; }
+  @keyframes wxPulse{ 0%,100%{ opacity:.75; } 50%{ opacity:1; } }
+  .wx-windbig .ws{ font-size:30px; font-weight:800; } .wx-windbig .wm{ font-size:13px; color:var(--ink-soft); } .wx-windbig .wt{ font-size:13px; font-weight:700; margin-top:4px; text-transform:capitalize; }
+  .wx-strip{ display:flex; gap:4px; overflow-x:auto; padding:6px 0 10px; align-items:stretch; }
+  .wx-chipday{ flex:0 0 auto; writing-mode:vertical-rl; transform:rotate(180deg); font-size:11px; font-weight:800; color:var(--ink-soft); text-transform:capitalize; padding:0 2px; }
+  .wx-chip{ flex:0 0 auto; width:42px; background:#fff; border:1px solid var(--paper-line); border-bottom:5px solid; border-radius:8px; padding:5px 0; text-align:center; font-size:12px; color:var(--ink); cursor:pointer; display:flex; flex-direction:column; gap:2px; align-items:center; }
+  .wx-chip b{ font-size:10px; color:var(--ink-soft); } .wx-chip.on{ outline:2px solid var(--forest-600); background:#f4f8f0; }
+
   .sun-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
   .sun-card{ background:#fff; border:1px solid var(--paper-line); border-radius:12px; padding:12px; }
   .sun-card .label{ font-size:11px; font-weight:700; color:var(--ink-soft); }
@@ -3889,34 +3926,284 @@
       sunHtml = '<div class="hint" style="margin-bottom:16px;">Kon zon/maan-gegevens niet berekenen.</div>';
     }
 
-    content.innerHTML = sunHtml + '<div class="hint">Weer laden…</div>';
+    content.innerHTML = '<div class="hint">Weer laden…</div>';
 
-    // Weather via Open-Meteo (free, EU-based, no API key) — needs internet connection
+    // Weer via Open-Meteo (gratis, EU, geen sleutel) — internet nodig
     try {
-      const data = await fetchOpenMeteoCurrent(lat, lng, '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=5');
+      const data = await fetchOpenMeteoCurrent(lat, lng,
+        '&hourly=temperature_2m,precipitation,precipitation_probability,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m,wind_direction_10m' +
+        '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant' +
+        '&forecast_days=5');
       const cur = data.current;
       lastWindData = { speed: cur.wind_speed_10m, dir: cur.wind_direction_10m, temp: cur.temperature_2m, code: cur.weather_code, lat, lng, at: Date.now() };
-      const [curDesc, curIcon] = wmoInfo(cur.weather_code);
-      let weatherHtml = '<div class="weather-now">' +
-        '<div class="icon">' + curIcon + '</div>' +
-        '<div><div class="temp">' + Math.round(cur.temperature_2m) + '°C</div>' +
-        '<div class="desc">' + curDesc + ' · wind ' + Math.round(cur.wind_speed_10m) + ' km/u</div></div>' +
-        '</div>';
-      weatherHtml += '<div class="weather-days">';
-      for (let i = 0; i < data.daily.time.length; i++) {
-        const d = new Date(data.daily.time[i]);
-        const [desc, icon] = wmoInfo(data.daily.weather_code[i]);
-        weatherHtml += '<div class="weather-day">' +
-          '<div class="d">' + (i===0?'Vandaag':fmtDayShort(d)) + '</div>' +
-          '<div class="i">' + icon + '</div>' +
-          '<div class="t">' + Math.round(data.daily.temperature_2m_max[i]) + '° <span>' + Math.round(data.daily.temperature_2m_min[i]) + '°</span></div>' +
-          '</div>';
-      }
-      weatherHtml += '</div>';
-      content.innerHTML = sunHtml + weatherHtml;
+      wxShow(content, sunHtml, data, lat, lng);
     } catch (e) {
+      console.error('weer', e);
       content.innerHTML = sunHtml + '<div class="hint">Geen internetverbinding — weerdata niet beschikbaar. Zon-/maantijden werken wel altijd offline.</div>';
     }
+  }
+
+  /* ---------- Volledig weerbericht: dagen / uren / radar / wind ---------- */
+  let wxState = null;
+  function wxStop() {
+    if (!wxState) return;
+    clearInterval(wxState.radarTimer); clearInterval(wxState.windTimer);
+    if (wxState.radarMap) { try { wxState.radarMap.remove(); } catch (e) {} }
+    wxState = null;
+  }
+  function wxSheetOpen() { return document.getElementById('sheetWeather').classList.contains('open'); }
+  function wxArrow(deg) {
+    return '<span class="wx-arr" style="transform:rotate(' + Math.round((deg + 180) % 360) + 'deg)">↑</span>';
+  }
+  function wxDayLabel(dateStr, i) {
+    if (i === 0) return 'Vandaag';
+    return new Date(dateStr + 'T12:00:00').toLocaleDateString('nl-BE', { weekday:'long', day:'numeric', month:'short' });
+  }
+
+  function wxDaysHtml(data, idx0) {
+    const h = data.hourly, d = data.daily;
+    let html = '<div class="hint" style="margin-bottom:10px;">Tik op een dag voor het uur-per-uur-overzicht.</div>';
+    for (let i = 0; i < d.time.length; i++) {
+      const [desc, icon] = wmoInfo(d.weather_code[i]);
+      let rows = '';
+      for (let k = Math.max(idx0, 0); k < h.time.length; k++) {
+        if (h.time[k].slice(0, 10) !== d.time[i]) continue;
+        const [hd, hi] = wmoInfo(h.weather_code[k]);
+        const mm = h.precipitation[k] || 0;
+        rows += '<div class="wx-hrow" title="' + hd + '">' +
+          '<span class="hh">' + h.time[k].slice(11, 16) + '</span>' +
+          '<span class="hi">' + hi + '</span>' +
+          '<span class="ht">' + Math.round(h.temperature_2m[k]) + '°</span>' +
+          '<span class="hp"><i style="width:' + Math.min(100, mm * 40) + '%"></i><b>' + (mm >= 0.1 ? mm.toFixed(1) + ' mm' : '') + '</b></span>' +
+          '<span class="hw">' + wxArrow(h.wind_direction_10m[k]) + ' ' + Math.round(h.wind_speed_10m[k]) + '<small> (' + Math.round(h.wind_gusts_10m[k]) + ')</small></span>' +
+          '</div>';
+      }
+      html += '<div class="wx-day">' +
+        '<div class="wx-day-head" data-wxday="' + i + '">' +
+          '<div class="l"><div class="dn">' + wxDayLabel(d.time[i], i) + '</div><div class="dd">' + icon + ' ' + desc + '</div></div>' +
+          '<div class="r"><div class="tt">' + Math.round(d.temperature_2m_max[i]) + '° <span>' + Math.round(d.temperature_2m_min[i]) + '°</span></div></div>' +
+          '<div class="m">💧 ' + (d.precipitation_sum[i] || 0).toFixed(1) + ' mm · ' + (d.precipitation_probability_max[i] || 0) + '% &nbsp; 🌬 ' +
+            wxArrow(d.wind_direction_10m_dominant[i]) + ' ' + compassLabel(d.wind_direction_10m_dominant[i]) + ' ' + Math.round(d.wind_speed_10m_max[i]) +
+            ' km/u (stoten ' + Math.round(d.wind_gusts_10m_max[i]) + ')</div>' +
+        '</div>' +
+        '<div class="wx-hours" id="wxHours' + i + '" hidden>' +
+          '<div class="wx-hrow wx-hhead"><span class="hh">Uur</span><span class="hi"></span><span class="ht">°C</span><span class="hp">Neerslag</span><span class="hw">Wind (stoten)</span></div>' +
+          rows + '</div>' +
+        '</div>';
+    }
+    return html;
+  }
+
+  function wxChartsHtml(data, idx0) {
+    const h = data.hourly;
+    const n = h.time.length - idx0;
+    if (n < 2) return '<div class="hint">Geen uurdata.</div>';
+    const step = 26, padL = 8, W = padL + n * step + 8, H = 130, top = 22, bot = 104;
+    const X = i => padL + i * step + step / 2;
+    const T = [], P = [], PP = [], WS = [], WG = [], WD = [], TM = [];
+    for (let i = 0; i < n; i++) {
+      const k = idx0 + i;
+      T.push(h.temperature_2m[k]); P.push(h.precipitation[k] || 0); PP.push(h.precipitation_probability[k] || 0);
+      WS.push(h.wind_speed_10m[k]); WG.push(h.wind_gusts_10m[k]); WD.push(h.wind_direction_10m[k]); TM.push(h.time[k]);
+    }
+    function grid() {
+      let s = '';
+      for (let i = 0; i < n; i++) {
+        const hr = TM[i].slice(11, 13);
+        if (hr === '00') {
+          s += '<line x1="' + (X(i) - step / 2) + '" x2="' + (X(i) - step / 2) + '" y1="0" y2="' + bot + '" stroke="#b9ad88" stroke-width="1.2"/>' +
+               '<text x="' + (X(i) - step / 2 + 4) + '" y="12" font-size="10" font-weight="700" fill="#4a4638">' +
+               new Date(TM[i].slice(0, 10) + 'T12:00:00').toLocaleDateString('nl-BE', { weekday:'short', day:'numeric' }) + '</text>';
+        }
+        if (parseInt(hr, 10) % 3 === 0) {
+          s += '<line x1="' + X(i) + '" x2="' + X(i) + '" y1="' + top + '" y2="' + bot + '" stroke="#e5ddc7" stroke-width="1"/>' +
+               '<text x="' + X(i) + '" y="' + (bot + 14) + '" font-size="9.5" text-anchor="middle" fill="#4a4638">' + hr + 'u</text>';
+        }
+      }
+      return s;
+    }
+    function svg(inner) {
+      return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,system-ui,sans-serif">' + grid() + inner + '</svg>';
+    }
+    // Temperatuur
+    const tmin = Math.floor(Math.min(...T) - 1), tmax = Math.ceil(Math.max(...T) + 1);
+    const yT = v => bot - (v - tmin) / (tmax - tmin || 1) * (bot - top - 8);
+    let tPts = T.map((v, i) => X(i) + ',' + yT(v).toFixed(1)).join(' ');
+    let tInner = '';
+    if (tmin < 0 && tmax > 0) tInner += '<line x1="0" x2="' + W + '" y1="' + yT(0) + '" y2="' + yT(0) + '" stroke="#2f6fa8" stroke-dasharray="4 3"/>';
+    tInner += '<polygon points="' + X(0) + ',' + bot + ' ' + tPts + ' ' + X(n - 1) + ',' + bot + '" fill="#d94f04" opacity=".13"/>' +
+      '<polyline points="' + tPts + '" fill="none" stroke="#d94f04" stroke-width="2.2" stroke-linejoin="round"/>';
+    for (let i = 0; i < n; i += 3) tInner += '<text x="' + X(i) + '" y="' + (yT(T[i]) - 6).toFixed(1) + '" font-size="10.5" font-weight="700" text-anchor="middle" fill="#1c1a15">' + Math.round(T[i]) + '°</text>';
+    // Neerslag
+    const pmax = Math.max(2, ...P);
+    let pInner = '';
+    for (let i = 0; i < n; i++) {
+      const bh = P[i] / pmax * (bot - top - 8);
+      if (bh > 0.4) pInner += '<rect x="' + (X(i) - step / 2 + 3) + '" y="' + (bot - bh).toFixed(1) + '" width="' + (step - 6) + '" height="' + bh.toFixed(1) + '" rx="2" fill="#2f6fa8"/>';
+      if (P[i] >= 0.5) pInner += '<text x="' + X(i) + '" y="' + (bot - bh - 3).toFixed(1) + '" font-size="9" text-anchor="middle" fill="#1c1a15">' + P[i].toFixed(1) + '</text>';
+    }
+    pInner += '<polyline points="' + PP.map((v, i) => X(i) + ',' + (bot - v / 100 * (bot - top - 8)).toFixed(1)).join(' ') + '" fill="none" stroke="#7aa6cf" stroke-width="1.6" stroke-dasharray="4 3"/>';
+    // Wind
+    const wmax = Math.ceil(Math.max(...WG, 10) / 10) * 10;
+    const yW = v => bot - v / wmax * (bot - top - 8);
+    let wInner = '<polygon points="' + X(0) + ',' + bot + ' ' + WS.map((v, i) => X(i) + ',' + yW(v).toFixed(1)).join(' ') + ' ' + X(n - 1) + ',' + bot + '" fill="#3f5c3f" opacity=".15"/>' +
+      '<polyline points="' + WG.map((v, i) => X(i) + ',' + yW(v).toFixed(1)).join(' ') + '" fill="none" stroke="#d94f04" stroke-width="1.6" stroke-dasharray="4 3"/>' +
+      '<polyline points="' + WS.map((v, i) => X(i) + ',' + yW(v).toFixed(1)).join(' ') + '" fill="none" stroke="#3f5c3f" stroke-width="2.2" stroke-linejoin="round"/>';
+    for (let i = 0; i < n; i += 3) {
+      wInner += '<text x="' + X(i) + '" y="' + (yW(WS[i]) - 6).toFixed(1) + '" font-size="10.5" font-weight="700" text-anchor="middle" fill="#1c1a15">' + Math.round(WS[i]) + '</text>' +
+        '<text transform="translate(' + X(i) + ',' + (top - 3) + ') rotate(' + Math.round((WD[i] + 180) % 360) + ')" font-size="12" font-weight="700" text-anchor="middle" fill="#4a4638">↑</text>';
+    }
+    return '<div class="hint" style="margin-bottom:8px;">Veeg zijwaarts om de 5 dagen uur per uur te bekijken.</div>' +
+      '<div class="wx-scroll"><div style="width:' + W + 'px">' +
+      '<div class="wx-ptitle">🌡️ Temperatuur (°C)</div>' + svg(tInner) +
+      '<div class="wx-ptitle">💧 Neerslag (mm per uur, balkjes) en kans (%, stippellijn)</div>' + svg(pInner) +
+      '<div class="wx-ptitle">🌬 Wind (km/u, groen) en windstoten (oranje) — pijl toont de richting waarheen de wind waait</div>' + svg(wInner) +
+      '</div></div>';
+  }
+
+  function wxWindHtml(data, idx0) {
+    const h = data.hourly, n = h.time.length - idx0;
+    let chips = '';
+    for (let i = 0; i < n; i++) {
+      const k = idx0 + i, hr = h.time[k].slice(11, 13);
+      if (hr === '00' || i === 0) chips += '<div class="wx-chipday">' + new Date(h.time[k].slice(0, 10) + 'T12:00:00').toLocaleDateString('nl-BE', { weekday:'short' }) + '</div>';
+      chips += '<div class="wx-chip" data-wxi="' + i + '" style="border-bottom-color:' + windColor(h.wind_speed_10m[k]) + '"><b>' + hr + 'u</b>' +
+        wxArrow(h.wind_direction_10m[k]) + '<span>' + Math.round(h.wind_speed_10m[k]) + '</span></div>';
+    }
+    return '<div class="wx-windbig">' +
+        '<div class="wx-bigarrow" id="wxBigArrow">↑</div>' +
+        '<div><div class="ws" id="wxWs">–</div><div class="wm" id="wxWm"></div><div class="wt" id="wxWt"></div></div>' +
+      '</div>' +
+      '<div class="wx-ctl"><button class="btn btn-outline" id="wxWindPlay" style="flex:0 0 52px;">▶</button>' +
+      '<input type="range" id="wxWindSlider" min="0" max="' + (n - 1) + '" value="0"></div>' +
+      '<div class="wx-strip" id="wxStrip">' + chips + '</div>' +
+      '<div class="hint">Pijl = richting waarheen de wind waait. Kleur onderaan: cyaan = rustig, geel = stevig, rood = storm.</div>';
+  }
+
+  function wxRadarHtml() {
+    return '<div id="wxRadarMap"></div>' +
+      '<div class="wx-ctl"><button class="btn btn-outline" id="wxRadarPlay" style="flex:0 0 52px;">⏸</button>' +
+      '<input type="range" id="wxRadarSlider" min="0" max="0" value="0"><span id="wxRadarTime">…</span></div>' +
+      '<div class="hint" id="wxRadarHint">Neerslagradar (RainViewer): laatste uren + korte voorspelling. Blauw/groen = licht, geel/rood = zware neerslag.</div>';
+  }
+
+  function wxInitRadar(lat, lng) {
+    if (wxState.radarMap) { setTimeout(() => wxState.radarMap.invalidateSize(), 50); return; }
+    const el = document.getElementById('wxRadarMap');
+    const m = L.map(el, { zoomControl:true, attributionControl:false }).setView([lat, lng], 7);
+    wxState.radarMap = m;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:12, opacity:.85 }).addTo(m);
+    L.circleMarker([lat, lng], { radius:7, color:'#fff', weight:2, fillColor:'#d94f04', fillOpacity:1 }).addTo(m);
+    setTimeout(() => m.invalidateSize(), 50);
+    const hint = document.getElementById('wxRadarHint'), timeEl = document.getElementById('wxRadarTime');
+    const slider = document.getElementById('wxRadarSlider'), playBtn = document.getElementById('wxRadarPlay');
+    fetch('https://api.rainviewer.com/public/weather-maps.json').then(r => {
+      if (!r.ok) throw new Error('radar ' + r.status);
+      return r.json();
+    }).then(j => {
+      const past = (j.radar && j.radar.past) || [], now = (j.radar && j.radar.nowcast) || [];
+      const frames = past.concat(now);
+      if (!frames.length) throw new Error('geen beelden');
+      const layers = frames.map(f => L.tileLayer(j.host + f.path + '/256/{z}/{x}/{y}/2/1_1.png',
+        { opacity:0, maxNativeZoom:7, maxZoom:12, zIndex:5 }).addTo(m));
+      let cur = Math.max(0, past.length - 1);
+      slider.max = frames.length - 1;
+      function show(i) {
+        layers[cur].setOpacity(0); cur = i; layers[cur].setOpacity(.7);
+        slider.value = i;
+        const d = new Date(frames[i].time * 1000);
+        timeEl.textContent = fmtTime(d) + (i >= past.length ? ' (verwacht)' : '');
+      }
+      function play() {
+        clearInterval(wxState.radarTimer);
+        wxState.radarTimer = setInterval(() => {
+          if (!wxSheetOpen()) { clearInterval(wxState.radarTimer); playBtn.textContent = '▶'; return; }
+          show((cur + 1) % frames.length);
+        }, 600);
+        playBtn.textContent = '⏸';
+      }
+      function pause() { clearInterval(wxState.radarTimer); playBtn.textContent = '▶'; }
+      playBtn.onclick = () => { if (playBtn.textContent === '⏸') pause(); else play(); };
+      slider.oninput = () => { pause(); show(parseInt(slider.value, 10)); };
+      show(cur); play();
+    }).catch(e => {
+      console.error('radar', e);
+      hint.textContent = 'Radarbeelden zijn nu niet beschikbaar (geen verbinding of de radardienst antwoordt niet). De voorspelling in de andere tabbladen werkt wel.';
+      timeEl.textContent = '';
+    });
+  }
+
+  function wxInitWind(data, idx0) {
+    const h = data.hourly, n = h.time.length - idx0;
+    const slider = document.getElementById('wxWindSlider'), playBtn = document.getElementById('wxWindPlay');
+    const strip = document.getElementById('wxStrip');
+    function show(i) {
+      const k = idx0 + i;
+      const dir = h.wind_direction_10m[k], sp = h.wind_speed_10m[k];
+      const a = document.getElementById('wxBigArrow');
+      a.style.transform = 'rotate(' + Math.round((dir + 180) % 360) + 'deg)';
+      a.style.color = windColor(sp);
+      a.style.animationDuration = windFlowDuration(sp) + 's';
+      document.getElementById('wxWs').textContent = Math.round(sp) + ' km/u';
+      document.getElementById('wxWm').textContent = 'uit ' + compassLabel(dir) + ' · stoten ' + Math.round(h.wind_gusts_10m[k]) + ' km/u';
+      document.getElementById('wxWt').textContent = new Date(h.time[k]).toLocaleDateString('nl-BE', { weekday:'long' }) + ' ' + h.time[k].slice(11, 16) + 'u';
+      slider.value = i;
+      strip.querySelectorAll('.wx-chip').forEach(c => c.classList.toggle('on', c.dataset.wxi == i));
+      const on = strip.querySelector('.wx-chip.on');
+      if (on) strip.scrollLeft = on.offsetLeft - strip.clientWidth / 2 + on.offsetWidth / 2;
+      wxState.windIdx = i;
+    }
+    function pause() { clearInterval(wxState.windTimer); playBtn.textContent = '▶'; }
+    function play() {
+      clearInterval(wxState.windTimer);
+      wxState.windTimer = setInterval(() => {
+        if (!wxSheetOpen()) { pause(); return; }
+        show(((wxState.windIdx || 0) + 1) % n);
+      }, 450);
+      playBtn.textContent = '⏸';
+    }
+    playBtn.onclick = () => { if (playBtn.textContent === '⏸') pause(); else play(); };
+    slider.oninput = () => { pause(); show(parseInt(slider.value, 10)); };
+    strip.addEventListener('click', ev => {
+      const c = ev.target.closest('.wx-chip'); if (!c) return;
+      pause(); show(parseInt(c.dataset.wxi, 10));
+    });
+    wxState.windPause = pause;
+    show(0);
+  }
+
+  function wxShow(content, sunHtml, data, lat, lng) {
+    wxStop();
+    wxState = { lat, lng, windIdx: 0 };
+    const cur = data.current, h = data.hourly;
+    const idx0 = Math.max(0, h.time.findIndex(t => t >= cur.time.slice(0, 13) + ':00'));
+    const [curDesc, curIcon] = wmoInfo(cur.weather_code);
+    const nowHtml = '<div class="weather-now"><div class="icon">' + curIcon + '</div>' +
+      '<div><div class="temp">' + Math.round(cur.temperature_2m) + '°C</div>' +
+      '<div class="desc">' + curDesc + ' · wind ' + wxArrow(cur.wind_direction_10m) + ' ' + compassLabel(cur.wind_direction_10m) + ' ' + Math.round(cur.wind_speed_10m) + ' km/u</div></div></div>';
+    content.innerHTML = nowHtml +
+      '<div class="wx-tabs">' +
+        '<button data-wxtab="days" class="on">Dagen</button><button data-wxtab="hours">Uur</button>' +
+        '<button data-wxtab="radar">Radar</button><button data-wxtab="wind">Wind</button><button data-wxtab="sun">Zon</button></div>' +
+      '<div class="wx-pane" data-wxpane="days">' + wxDaysHtml(data, idx0) + '</div>' +
+      '<div class="wx-pane" data-wxpane="hours" hidden>' + wxChartsHtml(data, idx0) + '</div>' +
+      '<div class="wx-pane" data-wxpane="radar" hidden>' + wxRadarHtml() + '</div>' +
+      '<div class="wx-pane" data-wxpane="wind" hidden>' + wxWindHtml(data, idx0) + '</div>' +
+      '<div class="wx-pane" data-wxpane="sun" hidden>' + sunHtml + '</div>';
+    wxInitWind(data, idx0);
+    content.querySelectorAll('.wx-day-head').forEach(hd => hd.addEventListener('click', () => {
+      const p = document.getElementById('wxHours' + hd.dataset.wxday);
+      p.hidden = !p.hidden; hd.classList.toggle('open', !p.hidden);
+    }));
+    content.querySelectorAll('.wx-tabs button').forEach(b => b.addEventListener('click', () => {
+      const t = b.dataset.wxtab;
+      content.querySelectorAll('.wx-tabs button').forEach(x => x.classList.toggle('on', x === b));
+      content.querySelectorAll('.wx-pane').forEach(p => { p.hidden = p.dataset.wxpane !== t; });
+      if (t === 'radar') wxInitRadar(lat, lng);
+      if (t === 'wind') { if (wxState.windPause) wxState.windIdx = wxState.windIdx || 0; }
+    }));
+    // opent het eerste dagblok al meteen
+    const first = document.querySelector('.wx-day-head'); if (first) first.click();
   }
 
   /* ---------- Export / import all data ---------- */
