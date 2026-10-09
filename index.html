@@ -1491,17 +1491,26 @@
       if (cfg.hasPhoto) row[cfg.photoField] = (rec.photo instanceof Blob) ? await blobToBase64(rec.photo) : null;
       const { error } = await sb.from(cfg.table).upsert(row);
       if (!error) { rec._dirty = false; await idbPut(storeName, rec); }
+      else { lastSyncError = 'Versturen ' + cfg.table + ': ' + error.message; console.error('push', cfg.table, error); }
     }
     for (const id of getPendingDeletes(storeName)) {
       const { error } = await sb.from(cfg.table).delete().eq('id', id);
       if (!error) clearPendingDelete(storeName, id);
+      else { lastSyncError = 'Verwijderen ' + cfg.table + ': ' + error.message; }
     }
   }
   async function pullStore(storeName) {
     if (!navigator.onLine || !activeGebiedId) return;
     const cfg = SYNC_STORES[storeName];
-    const { data, error } = await sb.from(cfg.table).select('*').eq('gebied_id', activeGebiedId);
-    if (error || !data) return;
+    // Supabase geeft standaard maximaal 1000 rijen per vraag terug: in blokken ophalen,
+    // anders ontbreken bij grote gebieden de nieuwste registraties van collega's.
+    const data = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: part, error } = await sb.from(cfg.table).select('*').eq('gebied_id', activeGebiedId).order('id', { ascending: true }).range(from, from + 999);
+      if (error || !part) { lastSyncError = 'Ophalen ' + cfg.table + ': ' + (error ? error.message : 'geen data'); return; }
+      data.push(...part);
+      if (part.length < 1000) break;
+    }
     const arr = syncArrayFor(storeName);
     const localById = {}; arr.forEach(r => { localById[r.id] = r; });
     for (const row of data) {
@@ -1536,6 +1545,7 @@
 
   let syncing = false;
   let lastSyncAt = null;
+  let lastSyncError = null;
   function pendingSyncCount() {
     return ['entries','markers','tracks','tableaus'].reduce((n, s) =>
       n + syncArrayFor(s).filter(r => r._dirty).length + getPendingDeletes(s).length, 0);
@@ -1546,6 +1556,7 @@
     if (syncing) { el.textContent = '🔄 Bezig met synchroniseren...'; return; }
     if (!navigator.onLine) { el.textContent = '📴 Offline — wijzigingen worden bewaard tot je weer bereik hebt (' + pendingSyncCount() + ' wachtend)'; return; }
     const p = pendingSyncCount();
+    if (lastSyncError) { el.textContent = '⚠️ Synchronisatie-probleem: ' + lastSyncError + (p ? ' (' + p + ' wachtend)' : ''); return; }
     el.textContent = p > 0 ? ('⏳ ' + p + ' wijziging(en) worden gesynchroniseerd...')
       : (lastSyncAt ? ('✅ Alles gesynchroniseerd · laatst om ' + new Date(lastSyncAt).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})) : '');
   }
@@ -1553,7 +1564,7 @@
     if (!currentGroupId || !activeGebiedId) return;
     if (!navigator.onLine) { updateSyncStatusUi(); return; }
     if (syncing) return;
-    syncing = true; updateSyncStatusUi();
+    syncing = true; lastSyncError = null; updateSyncStatusUi();
     try {
       await syncStore('entries'); await syncStore('markers'); await syncStore('tracks'); await syncStore('tableaus');
       lastSyncAt = Date.now();
