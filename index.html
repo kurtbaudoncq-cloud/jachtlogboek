@@ -887,6 +887,9 @@
     <input type="file" id="fileImportWildKml" class="file-hidden" accept=".kml,.kmz">
     <button class="btn btn-outline" id="btnLinkKmzPhotos" style="margin-bottom:10px;">📷 Foto's koppelen aan bestaande registraties (KMZ)</button>
     <input type="file" id="fileLinkKmzPhotos" class="file-hidden" accept=".kml,.kmz">
+    <button class="btn btn-outline" id="btnLinkWaPhotos" style="margin-bottom:10px;">💬 Foto's koppelen uit WhatsApp-groepen (zip)</button>
+    <input type="file" id="fileLinkWaPhotos" class="file-hidden" accept=".zip" multiple>
+    <div class="hint" style="margin-bottom:10px;">Exporteer de WhatsApp-groep "met media" en kies hier het .zip-bestand (je mag er meerdere tegelijk kiezen). Elke foto wordt gekoppeld aan de registratie op de locatie die in de chat bij die foto staat. Werkt ook offline.</div>
     <div class="hint" id="linkKmzPhotosHint" style="margin-bottom:10px;">Kies de Google My Maps-export (.kmz) met de foto's. Elke foto wordt gekoppeld aan de registratie met dezelfde datum, uur en plaats. Je telefoon of computer haalt de foto's zelf op, daarvoor is internet nodig.</div>
     <div class="field" id="importWildKmlArea" style="display:none; margin-bottom:10px;">
       <div class="hint" id="importWildKmlSummary" style="margin-bottom:8px;"></div>
@@ -1602,7 +1605,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-d'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-e'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
@@ -2477,6 +2480,87 @@
       await appAlert('De foto\'s konden niet worden opgehaald (' + firstErr + ').\n\nGoogle laat meestal niet toe dat een andere website zijn foto\'s rechtstreeks ophaalt. Er is niets gewijzigd.');
       return;
     }
+    await appAlert(ok + ' foto\'s gekoppeld' + (fail ? ', ' + fail + ' mislukt' : '') + '. Ze worden nu gesynchroniseerd (kan even duren).');
+    syncAllStores();
+  });
+
+
+  /* ---------- Foto's uit WhatsApp-export (zip) koppelen aan bestaande registraties ---------- */
+  function parseWaChat(text) {
+    const re = /^[‎‏]*\[(\d{1,2})\/(\d{1,2})\/(\d{4}), (\d{1,2}):(\d{2}):(\d{2})\] ([^:]+): [‎‏]*(.*)$/;
+    const photos = [], locs = [];
+    text.split(/\r?\n/).forEach(line => {
+      const m = line.match(re); if (!m) return;
+      const t = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]).getTime();
+      const who = m[7].trim(), body = m[8];
+      const f = body.match(/<bijgevoegd: ([^>]+\.(?:jpe?g|png|webp|heic))>/i) || body.match(/<attached: ([^>]+\.(?:jpe?g|png|webp|heic))>/i);
+      if (f) { photos.push({ t, who, file: f[1].trim() }); return; }
+      const l = body.match(/maps\.google\.com\/\?q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+      if (l) locs.push({ t, who, lat: parseFloat(l[1]), lng: parseFloat(l[2]) });
+    });
+    return { photos, locs };
+  }
+  document.getElementById('btnLinkWaPhotos').addEventListener('click', () => document.getElementById('fileLinkWaPhotos').click());
+  document.getElementById('fileLinkWaPhotos').addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    const free = entries.filter(en => !en.photo);
+    const usedEn = new Set(), matches = [];
+    let totalPhotos = 0;
+    try {
+      for (const f of files) {
+        const zip = await JSZip.loadAsync(f);
+        const chatFile = Object.values(zip.files).find(x => /_chat\.txt$/i.test(x.name) || /\.txt$/i.test(x.name));
+        if (!chatFile) continue;
+        const { photos, locs } = parseWaChat(await chatFile.async('text'));
+        totalPhotos += photos.length;
+        const usedPh = new Set();
+        for (const loc of locs) {
+          // dichtstbijzijnde foto van dezelfde persoon (binnen 3 min) die nog niet gebruikt is
+          let bp = null, bd = Infinity;
+          photos.forEach((ph, i) => {
+            if (usedPh.has(i) || ph.who !== loc.who) return;
+            const d = Math.abs(ph.t - loc.t);
+            if (d <= 180000 && d < bd) { bp = i; bd = d; }
+          });
+          if (bp === null) continue;
+          const zf = zip.file(photos[bp].file) || Object.values(zip.files).find(x => x.name.endsWith(photos[bp].file));
+          if (!zf) continue;
+          // registratie op die plek (zelfde coördinaat, max 25 m) zonder foto
+          let be = null, bed = Infinity;
+          for (const en of free) {
+            if (usedEn.has(en.id)) continue;
+            const d = haversine(loc.lat, loc.lng, en.lat, en.lng);
+            if (d <= 25 && d < bed) { be = en; bed = d; }
+          }
+          if (!be) continue;
+          usedPh.add(bp); usedEn.add(be.id);
+          matches.push({ en: be, zf });
+        }
+      }
+    } catch (err) { await appAlert('Kon de zip niet lezen: ' + (err && err.message || err)); return; }
+    if (!matches.length) {
+      await appAlert(totalPhotos + ' foto\'s in de gekozen bestanden, maar geen enkele past bij een registratie zonder foto (zelfde locatie binnen 25 m). Zijn de registraties van deze groep al aangemaakt in de app?');
+      return;
+    }
+    if (!(await appConfirm(totalPhotos + ' foto\'s in de bestanden, ' + matches.length + ' passen bij een bestaande registratie zonder foto. Nu koppelen?'))) return;
+    let ok = 0, fail = 0;
+    for (let i = 0; i < matches.length; i++) {
+      const { en, zf } = matches[i];
+      toast('Foto ' + (i + 1) + ' van ' + matches.length + '…', 3000);
+      try {
+        const blob = await zf.async('blob');
+        const typed = blob.type ? blob : new Blob([blob], { type: 'image/jpeg' });
+        en.photo = await compressImage(typed, 1280, 0.75);
+        en.updated_at = Date.now(); en._dirty = true;
+        await idbPut('entries', en);
+        if (entryMarkers[en.id]) { map.removeLayer(entryMarkers[en.id]); delete entryMarkers[en.id]; }
+        if (en.gebied_id === activeGebiedId) addEntryMarker(en);
+        ok++;
+      } catch (err) { fail++; }
+    }
+    renderWildList();
     await appAlert(ok + ' foto\'s gekoppeld' + (fail ? ', ' + fail + ' mislukt' : '') + '. Ze worden nu gesynchroniseerd (kan even duren).');
     syncAllStores();
   });
