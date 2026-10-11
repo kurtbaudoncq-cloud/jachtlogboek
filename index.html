@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Jachtlogboek</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="theme-color" content="#16241a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Jachtlogboek">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
   :root{
@@ -863,6 +871,10 @@
     <div class="field" style="background:#f4f1ea;border-radius:10px;padding:10px 12px;margin-bottom:14px;">
       <div id="syncStatusText" style="font-size:13px;"></div>
       <button class="btn btn-outline" id="btnSyncNow" style="margin-top:8px;">🔄 Synchroniseer nu</button>
+      <div class="divider"></div>
+      <div style="font-size:13px;"><b>App-versie:</b> <span id="appVersionText"></span></div>
+      <button class="btn btn-outline" id="btnRefreshApp" style="margin-top:8px;">♻️ Ververs de app (laatste versie ophalen)</button>
+      <div class="hint" style="margin-top:6px;">Wist de bewaarde kopie van de app op dit toestel en laadt alles opnieuw. Je wild, markers en sporen blijven bewaard.</div>
     </div>
     <button class="btn btn-secondary" id="btnExport" style="margin-bottom:10px;">⇩ Back-up downloaden</button>
     <button class="btn btn-outline" id="btnImport">⇧ Back-up terugzetten</button>
@@ -1586,6 +1598,21 @@
   }
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
+  /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
+  const APP_VERSION = '2026-10-11-a'; // gelijk houden met VERSION in sw.js
+  (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
+  }
+  document.getElementById('btnRefreshApp').addEventListener('click', async () => {
+    toast('App wordt ververst…');
+    try {
+      if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); }
+      if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); }
+    } catch (e) { console.warn(e); }
+    location.reload();
+  });
+
   // Veldgebruik: vaak geen bereik. Wachtende wijzigingen worden elke 20 s opnieuw geprobeerd,
   // zodra de app weer zichtbaar wordt, en zodra er internet is. Zonder wachtende wijzigingen: elke 2 min.
   let lastSyncTry = 0;
