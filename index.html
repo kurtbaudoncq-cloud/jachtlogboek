@@ -1358,15 +1358,15 @@
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
     }));
-    return attempt(value).catch(async (err) => {
-      if (value && value.photo instanceof Blob) {
+    // Foto's altijd als tekst (data-URL) bewaren: op iPhone kunnen Blobs in IndexedDB na een herstart onleesbaar worden.
+    if (value && value.photo instanceof Blob) {
+      return blobToBase64(value.photo).then(str => {
         const copy = Object.assign({}, value);
-        copy.photo = await blobToBase64(value.photo);
-        copy._photoIsStr = true;
+        copy.photo = str; copy._photoIsStr = true;
         return attempt(copy);
-      }
-      throw err;
-    });
+      }).catch(() => attempt(value));
+    }
+    return attempt(value);
   }
   function idbRestorePhoto(rec) {
     if (rec && rec._photoIsStr && typeof rec.photo === 'string') {
@@ -1605,7 +1605,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-g'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-h'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
@@ -3624,7 +3624,7 @@
     if (entry.note) popupHtml += '<br><em>' + escapeHtml(entry.note) + '</em>';
     if (entry.photo) {
       const url = URL.createObjectURL(entry.photo);
-      popupHtml = '<img src="' + url + '" onclick="window.__showWildDetail(\'' + entry.id + '\',true)" style="width:160px;border-radius:8px;display:block;margin-bottom:2px;cursor:zoom-in;"><div style="font-size:11px;color:#777;margin-bottom:6px;">🔍 Tik op de foto om te vergroten</div>' + popupHtml;
+      popupHtml = '<img src="' + url + '" onclick="window.__showWildDetail(\'' + entry.id + '\',true)" onerror="window.__photoBroken(\'' + entry.id + '\')" style="width:160px;border-radius:8px;display:block;margin-bottom:2px;cursor:zoom-in;"><div style="font-size:11px;color:#777;margin-bottom:6px;">🔍 Tik op de foto om te vergroten</div>' + popupHtml;
     }
     popupHtml += '<div style="margin-top:6px;display:flex;gap:6px;">' +
       '<button type="button" onclick="window.__openWildEdit(\'' + entry.id + '\')" style="padding:6px 10px;border:none;border-radius:6px;background:' + col + ';color:#fff;font-weight:600;">✏️ Bewerken</button>' +
@@ -3634,6 +3634,28 @@
     entryMarkers[entry.id] = marker;
     if (!entryVisibleUnderFilter(entry)) map.removeLayer(marker);
   }
+
+
+  // Foto onleesbaar? Dan automatisch opnieuw ophalen van de server (als ze daar staat).
+  const photoRepairing = new Set();
+  window.__photoBroken = async function (id) {
+    if (photoRepairing.has(id)) return;
+    photoRepairing.add(id);
+    try {
+      const en = entries.find(e => e.id === id);
+      if (!en || !navigator.onLine || typeof sb === 'undefined' || !sb) return;
+      const { data, error } = await sb.from('wild_entries').select('photo_base64').eq('id', String(id)).maybeSingle();
+      if (error || !data || !data.photo_base64) return;
+      const blob = base64ToBlob(data.photo_base64);
+      if (!blob) return;
+      en.photo = blob;
+      await idbPut('entries', en);
+      if (entryMarkers[id]) { map.removeLayer(entryMarkers[id]); delete entryMarkers[id]; }
+      if (en.gebied_id === activeGebiedId) addEntryMarker(en);
+      renderWildList();
+      toast('Foto hersteld');
+    } catch (_) { /* stil falen */ }
+  };
 
   /* ---------- Foto vergroten / registratie openen ---------- */
   (function () {
@@ -3676,6 +3698,7 @@
     box.querySelector('#lbClose').addEventListener('click', close);
     document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && box.classList.contains('show')) close(); });
     img.addEventListener('click', () => { sc.classList.toggle('zoomed'); sc.scrollTo(0, 0); });
+    img.addEventListener('error', () => { if (curEntry) window.__photoBroken(curEntry.id); });
     box.querySelector('#lbMap').addEventListener('click', () => {
       const en = curEntry; close(); if (!en) return;
       closeAllSheets(); map.setView([en.lat, en.lng], 17);
@@ -4155,7 +4178,7 @@
       const card = document.createElement('div');
       card.className = 'list-card';
       const thumbHtml = entry.photo
-        ? '<img class="thumb" src="' + URL.createObjectURL(entry.photo) + '">'
+        ? '<img class="thumb" src="' + URL.createObjectURL(entry.photo) + '" onerror="window.__photoBroken(\'' + entry.id + '\')">'
         : '<div class="thumb" style="background:' + yearColor(entryYear(entry)) + ';color:#fff;display:flex;align-items:center;justify-content:center;">' + speciesIconSvg(entry.species, yearColor(entryYear(entry)), 30) + '</div>';
       const subtypeTag = entry.subtype ? ' <span style="font-weight:500;color:var(--ink-soft);">· ' + subtypeDisplay(entry.subtype) + '</span>' : '';
       card.innerHTML = thumbHtml +
