@@ -1609,7 +1609,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-i'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-j'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
@@ -4192,6 +4192,38 @@
     toast('Jaarverslag geëxporteerd naar Excel');
   });
 
+  // Scherpe miniaturen: de browser verkleint een grote foto naar 52 px vaak korrelig; daarom eerst stapsgewijs een echte kleine versie (156 px) maken.
+  const thumbCache = new Map();
+  function makeThumbUrl(entry) {
+    const key = entry.id + '|' + (entry.updated_at || 0);
+    if (thumbCache.has(key)) return thumbCache.get(key);
+    const pr = new Promise(res => {
+      const img = new Image(), u = URL.createObjectURL(entry.photo);
+      img.onload = () => {
+        URL.revokeObjectURL(u);
+        try {
+          const T = 156;
+          const sc = Math.max(T / img.naturalWidth, T / img.naturalHeight);
+          let w = img.naturalWidth, h = img.naturalHeight, src = img;
+          // stapsgewijs halveren tot net boven het doel (geeft veel scherper resultaat)
+          while (w * 0.5 >= T * 1.0 && h * 0.5 >= T * 1.0) {
+            const c = document.createElement('canvas'); c.width = Math.round(w / 2); c.height = Math.round(h / 2);
+            const cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(src, 0, 0, c.width, c.height);
+            src = c; w = c.width; h = c.height;
+          }
+          const c = document.createElement('canvas'); c.width = T; c.height = T;
+          const cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high';
+          const sw = Math.min(w, h);
+          cx.drawImage(src, (w - sw) / 2, (h - sw) / 2, sw, sw, 0, 0, T, T);
+          c.toBlob(b => res(b ? URL.createObjectURL(b) : null), 'image/jpeg', 0.88);
+        } catch (e) { res(null); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(u); res(null); };
+      img.src = u;
+    });
+    thumbCache.set(key, pr);
+    return pr;
+  }
   function renderWildList() {
     renderWildYearFilterChips();
     const listEl = document.getElementById('wildListEl');
@@ -4214,7 +4246,7 @@
       const card = document.createElement('div');
       card.className = 'list-card';
       const thumbHtml = entry.photo
-        ? '<img class="thumb" src="' + URL.createObjectURL(entry.photo) + '" onerror="window.__photoBroken(\'' + entry.id + '\')">'
+        ? '<img class="thumb" data-eid="' + entry.id + '" src="' + URL.createObjectURL(entry.photo) + '" onerror="window.__photoBroken(\'' + entry.id + '\')">'
         : '<div class="thumb" style="background:' + yearColor(entryYear(entry)) + ';color:#fff;display:flex;align-items:center;justify-content:center;">' + speciesIconSvg(entry.species, yearColor(entryYear(entry)), 30) + '</div>';
       const subtypeTag = entry.subtype ? ' <span style="font-weight:500;color:var(--ink-soft);">· ' + subtypeDisplay(entry.subtype) + '</span>' : '';
       card.innerHTML = thumbHtml +
@@ -4244,6 +4276,11 @@
         renderWildList();
       });
       listEl.appendChild(card);
+    });
+    listEl.querySelectorAll('img.thumb[data-eid]').forEach(im => {
+      const en = entries.find(e => e.id === im.getAttribute('data-eid'));
+      if (!en || !(en.photo instanceof Blob)) return;
+      makeThumbUrl(en).then(u => { if (u && im.isConnected) im.src = u; });
     });
   }
 
