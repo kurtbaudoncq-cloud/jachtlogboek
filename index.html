@@ -1599,7 +1599,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-b'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-c'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
@@ -1847,7 +1847,7 @@
       g.zones.forEach(ring => {
         if (!Array.isArray(ring) || ring.length < 3) return;
         try {
-          const poly = L.polygon(ring, { color, weight:2, fillColor:color, fillOpacity:0.1, dashArray:'5,5' });
+          const poly = L.polygon(ring, { color, weight:2, fillColor:color, fillOpacity:0, dashArray:'5,5' });
           poly.bindTooltip(g.name, { permanent:true, direction:'center', className:'gebied-overlay-label' });
           layers.push(poly);
         } catch(e) {}
@@ -1873,7 +1873,7 @@
           ring.every(pt => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
         if (!validRing) { console.warn('Ongeldige zone overgeslagen bij tekenen, index', idx, ring); return; }
         const bc = boundaryColor();
-        polygons.push(L.polygon(ring, { color:bc, weight:3, fillColor:bc, fillOpacity:0.1 }));
+        polygons.push(L.polygon(ring, { color:bc, weight:3, fillColor:bc, fillOpacity:0 }));
       } catch (e) { console.warn('Kon zone niet tekenen, index', idx, e); }
     });
     boundaryLayer = L.layerGroup(polygons).addTo(map);
