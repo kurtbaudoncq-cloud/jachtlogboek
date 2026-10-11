@@ -1609,7 +1609,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-j'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-k'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
@@ -2505,18 +2505,63 @@
     });
     return { photos, locs, texts };
   }
-  // Soort + type raden uit de tekst bij de registratie
-  function waGuessSpecies(txt, dflt) {
-    const s = (txt || '').toLowerCase();
-    if (/boar|zwijn|everzwijn/.test(s)) return { species: 'Wild zwijn' };
-    if (/stag calf|calf stag/.test(s)) return { species: 'Hert', subtype: 'kalf_m' };
-    if (/hind calf|calf hind/.test(s)) return { species: 'Hert', subtype: 'kalf_v' };
-    if (/\bcalf\b|kalf/.test(s)) return { species: 'Hert', subtype: 'kalf_v' };
-    if (/\bhinds?\b|hinde/.test(s)) return { species: 'Hert', subtype: 'hinde' };
-    if (/\bstag\b|\bstags\b|\bhert\b|red deer/.test(s)) return { species: 'Hert', subtype: 'hert' };
-    if (/\bbuck\b|\bbok\b|bokken/.test(s)) return { species: 'Ree', subtype: 'bok' };
-    if (/\broe\b|\bree\b/.test(s)) return { species: 'Ree' };
-    return { species: dflt };
+  // Op de foto's gecontroleerde soorten (locatie → [soort, type]) voor de reeds ingelezen chats.
+  const WA_FIX = {"57.10342,-2.89119":["Ree","bok"],"57.09985,-2.85094":["Ree","bok"],"57.08704,-2.86863":["Ree","bok"],"57.10436,-2.90802":["Ree","bok"],"57.09394,-2.89640":["Ree","bok"],"57.06426,-2.93359":["Ree","geit"],"57.06420,-2.93320":["Ree","geit"],"57.07511,-2.91412":["Ree","bok"],"57.09618,-2.88317":["Ree","bok"],"57.09129,-2.89731":["Ree","bok"],"57.08727,-2.89605":["Ree","bok"],"57.10270,-2.89743":["Ree","bok"],"57.08724,-2.85927":["Ree","geit"],"57.09469,-2.85281":["Ree","bok"],"56.61970,-3.64956":["Ree","bok"],"56.61166,-3.68392":["Ree","bok"],"56.64592,-3.69964":["Ree","bok"],"56.61489,-3.67501":["Ree","bok"],"56.60673,-3.69134":["Ree","bok"],"56.61999,-3.65143":["Ree",null],"57.09121,-2.89103":["Ree","bok"],"57.10038,-2.87789":["Ree","bok"],"57.09541,-2.87369":["Ree","bok"],"57.09730,-2.86823":["Ree","bok"],"57.09632,-2.89548":["Ree","bok"],"57.07479,-2.90827":["Ree","bok"]};
+  const WA_NUMS = { a:1, an:1, one:1, two:2, three:3, four:4, five:5, six:6 };
+  // Alle dieren uit de chattekst halen: "Killed 2 hinds and a calf" → 2× Hinde + 1× Kalf.
+  function waParseAnimals(text) {
+    const raw = ' ' + (text || '').toLowerCase().replace(/what do you call.*$/, ' ').replace(/[()\[\]!?:;…]/g, ' ') + ' ';
+    const hasAnimal = /\b(hinds?|stags?|calf|calves|bucks?|does?|doe|kids?|boars?|fox|foxes|yearling)\b|bok/.test(raw);
+    if (/\bsaw\b|never gave|sunny day|hi todd|no problem|didn.t see/.test(raw) && (!hasAnimal || /\bsaw\b|never gave/.test(raw))) return { skip: true, list: [] };
+    const list = [];
+    const clauses = raw.split(/\s*(?:,|\band\b|&|\.|·|\||\bwith\b|\bbut\b)\s*/);
+    const wantCalf = /calf|calves/.test(raw);
+    clauses.forEach(cl => {
+      cl = cl.replace(/\b(just|killed|shot|another|nevertheless|the|this|morning|is|was|really|nice|old|big|single|one|also|here|dispatched)\b/g, m => (m === 'one' ? 'one' : ' ')).trim();
+      if (!cl) return;
+      const nm = cl.match(/^(\d+|a|an|one|two|three|four|five|six)\b/);
+      let n = nm ? (isNaN(nm[1]) ? WA_NUMS[nm[1]] : parseInt(nm[1], 10)) : 1;
+      if (!n || n > 8) n = 1;
+      let sp = null, st = null;
+      if (/\bstag calf\b|\bmale calf\b/.test(cl) && !/female/.test(cl)) { sp = 'Hert'; st = 'kalf_m'; }
+      else if (/\bfemale calf\b|\bhind calf\b/.test(cl)) { sp = 'Hert'; st = 'kalf_v'; }
+      else if (/\blast years? calf\b|\byearling calf\b/.test(cl)) { sp = 'Hert'; st = null; }
+      else if (/\bcalf\b|\bcalves\b/.test(cl)) { sp = 'Hert'; st = null; }
+      else if (/\byearling stag\b|\bstags?\b/.test(cl)) { sp = 'Hert'; st = 'hert'; }
+      else if (/\bhinds?\b|\byearling hind\b|\byearling\b/.test(cl)) { sp = 'Hert'; st = 'hinde'; }
+      else if (/\bbucks?\b|bok/.test(cl)) { sp = 'Ree'; st = 'bok'; }
+      else if (/\bdoes?\b/.test(cl)) { sp = 'Ree'; st = 'geit'; }
+      else if (/\bfemale kid\b/.test(cl)) { sp = 'Ree'; st = 'kits_v'; }
+      else if (/\bkids?\b/.test(cl)) { sp = 'Ree'; st = 'kits_m'; }
+      else if (/\bboars?\b|zwijn/.test(cl)) { sp = 'Wild zwijn'; }
+      else if (/\bfox(es)?\b/.test(cl)) { sp = 'Vos'; }
+      else if (/^(a )?male$/.test(cl) && wantCalf) { sp = 'Hert'; st = 'kalf_m'; }
+      if (sp) for (let k = 0; k < n; k++) list.push({ species: sp, subtype: st });
+    });
+    // "Killed 3" / "Killed 4 . 2 hinds, yearling and a stag calf": totaal aanvullen of afkappen
+    let tot = raw.match(/\bkilled (\d+|two|three|four|five)\b/);
+    if (tot) {
+      // "Killed 2 hinds and a calf": dat getal telt enkel de hinden, niet het totaal
+      const after = raw.slice(tot.index + tot[0].length);
+      if (/^\s*(small |young |big |old |yearling |male |female )*(hinds?|stags?|calf|calves|bucks?|does?|kids?)\b/.test(after)) tot = null;
+    }
+    if (tot) {
+      const N = isNaN(tot[1]) ? WA_NUMS[tot[1]] : parseInt(tot[1], 10);
+      if (N && N <= 8) {
+        const base = list.length ? list[0].species : 'Hert';
+        while (list.length < N) list.push({ species: base, subtype: null });
+        if (list.length > N) list.length = N;
+      }
+    }
+    return { skip: false, list };
+  }
+  // Als de tekst niets zegt: gok op chat en seizoen (bokkenseizoen april–september → Ree).
+  function waFallback(chatKey, ts) {
+    const d = new Date(ts), mo = d.getMonth() + 1, day = d.getDate();
+    if (/schotland/i.test(chatKey)) return { species: 'Ree', subtype: 'bok' };
+    if (mo >= 4 && mo <= 9) return { species: 'Ree', subtype: 'bok' };
+    if (mo === 10 && day <= 20) return { species: 'Hert', subtype: 'hert' };
+    return { species: 'Hert', subtype: 'hinde' };
   }
   document.getElementById('btnLinkWaPhotos').addEventListener('click', () => document.getElementById('fileLinkWaPhotos').click());
   document.getElementById('fileLinkWaPhotos').addEventListener('change', async (e) => {
@@ -2524,27 +2569,22 @@
     e.target.value = '';
     if (!files.length) return;
     if (blockedByLock && blockedByLock()) return;
-    const plan = [];            // { kind:'new'|'photo', ... }
-    const seen = new Set();     // lat,lng,ts-sleutel om dubbels in de chat te vermijden
+    const plan = [];            // { kind:'new'|'fix', ... }
+    const seen = new Set();
     const usedEn = new Set();
-    let nLoc = 0, nPhoto = 0, nSkipped = 0;
+    let nLoc = 0, nSkipped = 0;
     try {
       for (const f of files) {
         const zip = await JSZip.loadAsync(f);
         const chatFile = Object.values(zip.files).find(x => /\.txt$/i.test(x.name));
         if (!chatFile) continue;
+        const chatKey = f.name || '';
         const { photos, locs, texts } = parseWaChat(await chatFile.async('text'));
-        // standaardsoort voor deze chat: meer 'hind/stag/calf' dan 'bok/buck/roe' → Hert, anders Ree
-        const all = texts.map(x => x.body).join(' ').toLowerCase();
-        const nHert = (all.match(/\bhinds?\b|\bstags?\b|\bcalf\b|\bcalves\b/g) || []).length;
-        const nRee = (all.match(/\bbucks?\b|\bbok(ken)?\b|\broe\b|\bree\b/g) || []).length;
-        const dflt = nHert >= nRee && nHert > 0 ? 'Hert' : 'Ree';
         const usedPh = new Set();
         for (const loc of locs) {
           nLoc++;
           const key = loc.lat.toFixed(5) + ',' + loc.lng.toFixed(5) + ',' + Math.round(loc.t / 60000);
           if (seen.has(key)) continue; seen.add(key);
-          // foto van dezelfde persoon binnen 3 min voor of na de locatie
           let bp = null, bd = Infinity;
           photos.forEach((ph, i) => {
             if (usedPh.has(i) || ph.who !== loc.who) return;
@@ -2556,36 +2596,36 @@
             usedPh.add(bp);
             zf = zip.file(photos[bp].file) || Object.values(zip.files).find(x => x.name.endsWith(photos[bp].file)) || null;
           }
-          // tekst van dezelfde persoon binnen 3 min (kort ervoor of erna)
           const near = texts.filter(x => x.who === loc.who && Math.abs(x.t - loc.t) <= 180000).sort((a, b) => a.t - b.t).slice(0, 2).map(x => x.body).join(' · ');
-          // bestaat er al een registratie op deze plek?
-          let ex = null, exd = Infinity;
-          for (const en of entries) {
-            if (en.gebied_id !== activeGebiedId) continue;
-            const d = haversine(loc.lat, loc.lng, en.lat, en.lng);
-            if (d <= 15 && d < exd) { ex = en; exd = d; }
+          // dieren bepalen: eerst gecontroleerde foto-tabel, dan tekst, dan seizoen
+          const fx = WA_FIX[loc.lat.toFixed(5) + ',' + loc.lng.toFixed(5)];
+          let animals;
+          if (fx) animals = [{ species: fx[0], subtype: fx[1] }];
+          else {
+            const pa = waParseAnimals(near);
+            if (pa.skip && !zf) { nSkipped++; continue; }
+            animals = pa.list.length ? pa.list : [waFallback(chatKey, loc.t)];
           }
-          if (ex) {
-            if (!ex.photo && zf && !usedEn.has(ex.id)) { usedEn.add(ex.id); plan.push({ kind: 'photo', en: ex, zf }); nPhoto++; }
-            else nSkipped++;
-            continue;
-          }
-          const g = waGuessSpecies(near, dflt);
-          plan.push({ kind: 'new', loc, who: loc.who, note: near, g, zf });
+          // bestaande registraties op deze plek (zelfde dag ±1, binnen 15 m) worden gecorrigeerd i.p.v. dubbel aangemaakt
+          const exist = entries.filter(en => haversine(loc.lat, loc.lng, en.lat, en.lng) <= 15 && Math.abs(en.timestamp - loc.t) <= 36 * 3600 * 1000 && !usedEn.has(en.id))
+            .sort((a, b) => haversine(loc.lat, loc.lng, a.lat, a.lng) - haversine(loc.lat, loc.lng, b.lat, b.lng));
+          animals.forEach((an, k) => {
+            const ex = exist[k];
+            if (ex) { usedEn.add(ex.id); plan.push({ kind: 'fix', en: ex, g: an, zf: (k === 0 ? zf : null) }); }
+            else plan.push({ kind: 'new', loc, who: loc.who, note: near, g: an, zf: (k === 0 ? zf : null) });
+          });
         }
       }
     } catch (err) { await appAlert('Kon de zip niet lezen: ' + (err && err.message || err)); return; }
     const nNew = plan.filter(p => p.kind === 'new').length;
-    const nNewPhoto = plan.filter(p => p.kind === 'new' && p.zf).length;
-    if (!plan.length) {
-      await appAlert(nLoc + ' locaties in de chat gevonden. ' + (nSkipped ? nSkipped + ' staan al in de app. ' : '') + 'Er is niets nieuws om toe te voegen.');
-      return;
-    }
-    if (!(await appConfirm(nLoc + ' locaties in de chat.\n\n' + nNew + ' nieuwe registraties aanmaken (' + nNewPhoto + ' met foto)' + (nPhoto ? '\n' + nPhoto + ' foto\'s toevoegen aan bestaande registraties' : '') + (nSkipped ? '\n' + nSkipped + ' staan al in de app (overgeslagen)' : '') + '\n\nIn jachtgebied: ' + (typeof gebiedNaam !== 'undefined' ? gebiedNaam : 'het actieve gebied') + '. Doorgaan?'))) return;
-    let okNew = 0, okPhoto = 0, fail = 0;
+    const nFix = plan.filter(p => p.kind === 'fix').length;
+    const nPh = plan.filter(p => p.zf).length;
+    if (!plan.length) { await appAlert(nLoc + ' locaties in de chat gevonden, maar er is niets om toe te voegen.'); return; }
+    if (!(await appConfirm(nLoc + ' locaties in de chat.\n\n' + nNew + ' nieuwe registraties aanmaken\n' + nFix + ' bestaande registraties op dezelfde plek en dag corrigeren (soort/type) \n' + nPh + ' foto\'s toevoegen\n' + (nSkipped ? nSkipped + ' berichten zonder wild overgeslagen\n' : '') + '\nIn het actieve jachtgebied. Doorgaan?'))) return;
+    let okNew = 0, okFix = 0, fail = 0;
     for (let i = 0; i < plan.length; i++) {
       const p = plan[i];
-      toast('Verwerken ' + (i + 1) + ' van ' + plan.length + '…', 2500);
+      if (i % 5 === 0) toast('Verwerken ' + (i + 1) + ' van ' + plan.length + '…', 2500);
       try {
         let photo = null;
         if (p.zf) {
@@ -2594,13 +2634,15 @@
             photo = await compressImage(blob.type ? blob : new Blob([blob], { type: 'image/jpeg' }), 1280, 0.75);
           } catch (_) { photo = null; }
         }
-        if (p.kind === 'photo') {
-          if (!photo) { fail++; continue; }
-          p.en.photo = photo; p.en.updated_at = Date.now(); p.en._dirty = true;
-          await idbPut('entries', p.en);
-          if (entryMarkers[p.en.id]) { map.removeLayer(entryMarkers[p.en.id]); delete entryMarkers[p.en.id]; }
-          if (p.en.gebied_id === activeGebiedId) addEntryMarker(p.en);
-          okPhoto++;
+        if (p.kind === 'fix') {
+          const en = p.en;
+          en.species = p.g.species; en.subtype = p.g.subtype || null;
+          if (photo && !en.photo) en.photo = photo;
+          en.updated_at = Date.now(); en._dirty = true;
+          await idbPut('entries', en);
+          if (entryMarkers[en.id]) { map.removeLayer(entryMarkers[en.id]); delete entryMarkers[en.id]; }
+          if (en.gebied_id === activeGebiedId) addEntryMarker(en);
+          okFix++;
         } else {
           const entry = {
             id: genId(), gebied_id: activeGebiedId, species: p.g.species, subtype: p.g.subtype || null,
@@ -2618,7 +2660,7 @@
     }
     renderWildList();
     closeAllSheets();
-    await appAlert(okNew + ' registraties aangemaakt en gepind' + (okPhoto ? ', ' + okPhoto + ' foto\'s toegevoegd aan bestaande' : '') + (fail ? ', ' + fail + ' mislukt' : '') + '.\n\nSoort en type zijn geraden uit de chattekst (bv. hind → Hert/Hinde). Controleer ze in Wildregistraties en pas aan waar nodig. Ze worden nu gesynchroniseerd.');
+    await appAlert(okNew + ' registraties aangemaakt' + (okFix ? ', ' + okFix + ' bestaande gecorrigeerd' : '') + (fail ? ', ' + fail + ' mislukt' : '') + '.\n\nSoort en type komen uit mijn controle van de foto\'s, de chattekst en het seizoen. Registraties zonder foto of tekst blijven een inschatting. Ze worden nu gesynchroniseerd.');
     syncAllStores();
   });
 
