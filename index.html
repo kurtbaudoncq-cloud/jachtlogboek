@@ -885,6 +885,9 @@
     <div class="divider"></div>
     <button class="btn btn-outline" id="btnImportWildKml" style="margin-bottom:10px;">🦌 Historische wildregistraties importeren (KML/KMZ)</button>
     <input type="file" id="fileImportWildKml" class="file-hidden" accept=".kml,.kmz">
+    <button class="btn btn-outline" id="btnLinkKmzPhotos" style="margin-bottom:10px;">📷 Foto's koppelen aan bestaande registraties (KMZ)</button>
+    <input type="file" id="fileLinkKmzPhotos" class="file-hidden" accept=".kml,.kmz">
+    <div class="hint" id="linkKmzPhotosHint" style="margin-bottom:10px;">Kies de Google My Maps-export (.kmz) met de foto's. Elke foto wordt gekoppeld aan de registratie met dezelfde datum, uur en plaats. Je telefoon of computer haalt de foto's zelf op, daarvoor is internet nodig.</div>
     <div class="field" id="importWildKmlArea" style="display:none; margin-bottom:10px;">
       <div class="hint" id="importWildKmlSummary" style="margin-bottom:8px;"></div>
       <label>Soort om aan deze registraties toe te kennen</label>
@@ -1599,7 +1602,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-c'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-d'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
@@ -2369,6 +2372,112 @@
     document.getElementById('importWildKmlArea').style.display = 'none';
     closeAllSheets();
     toast(count + ' wildregistraties geïmporteerd');
+    syncAllStores();
+  });
+
+  /* ---------- Foto's koppelen aan bestaande registraties vanuit een KMZ (Google My Maps) ---------- */
+  function parseKmlPhotoPoints(text) {
+    const xml = new DOMParser().parseFromString(text, 'text/xml');
+    const dateTimeRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})\)?\s*(\d{1,2}):(\d{2})/;
+    const dateOnlyRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
+    const out = [];
+    for (const pm of xml.getElementsByTagName('Placemark')) {
+      const pt = pm.getElementsByTagName('Point')[0];
+      if (!pt) continue;
+      const cn = pt.getElementsByTagName('coordinates')[0];
+      if (!cn) continue;
+      const pr = cn.textContent.trim().split(',');
+      const lng = parseFloat(pr[0]), lat = parseFloat(pr[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      const nameNode = pm.getElementsByTagName('name')[0];
+      const descNode = pm.getElementsByTagName('description')[0];
+      const name = nameNode ? nameNode.textContent.trim() : '';
+      const desc = descNode ? descNode.textContent : '';
+      let url = null;
+      for (const v of pm.getElementsByTagName('value')) {
+        const t = v.textContent.trim();
+        if (/^https?:\/\//.test(t)) { url = t; break; }
+      }
+      if (!url) { const mm = desc.match(/<img[^>]+src="([^"]+)"/i); if (mm) url = mm[1]; }
+      if (!url) continue;
+      const searchText = name + ' ' + desc.replace(/<[^>]*>/g, ' ');
+      let ts = null, m = searchText.match(dateTimeRe);
+      if (m) ts = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).getTime();
+      else { m = searchText.match(dateOnlyRe); if (m) ts = new Date(+m[3], +m[2] - 1, +m[1], 12, 0).getTime(); }
+      if (ts === null || isNaN(ts)) continue;
+      out.push({ name, lat, lng, ts, url });
+    }
+    return out;
+  }
+  async function fetchPhotoBlob(url) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 25000);
+    try {
+      const r = await fetch(url, { signal: ctl.signal, mode: 'cors', credentials: 'omit' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const b = await r.blob();
+      if (!b.type || !b.type.startsWith('image/')) throw new Error('geen afbeelding');
+      return b;
+    } finally { clearTimeout(t); }
+  }
+  document.getElementById('btnLinkKmzPhotos').addEventListener('click', () => document.getElementById('fileLinkKmzPhotos').click());
+  document.getElementById('fileLinkKmzPhotos').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!navigator.onLine) { toast('Geen internetverbinding'); return; }
+    let text = '';
+    try {
+      if (file.name.toLowerCase().endsWith('.kmz')) {
+        const zip = await JSZip.loadAsync(file);
+        const kmlEntry = Object.values(zip.files).find(f => f.name.toLowerCase().endsWith('.kml'));
+        if (!kmlEntry) throw new Error('Geen KML-bestand gevonden in dit KMZ-archief');
+        text = await kmlEntry.async('text');
+      } else { text = await file.text(); }
+    } catch (err) { toast('Kon bestand niet lezen: ' + err.message); return; }
+    const points = parseKmlPhotoPoints(text);
+    if (!points.length) { await appAlert('In dit bestand staan geen markeringen met foto en datum.'); return; }
+    // Koppel elke foto aan de dichtstbijzijnde registratie (zelfde minuut, binnen 60 m) die nog geen foto heeft.
+    const free = entries.filter(en => en.gebied_id === activeGebiedId && !en.photo);
+    const used = new Set(), matches = [];
+    for (const pt of points) {
+      let best = null, bestD = Infinity;
+      for (const en of free) {
+        if (used.has(en.id)) continue;
+        if (Math.abs(en.timestamp - pt.ts) > 120000) continue;
+        const d = haversine(pt.lat, pt.lng, en.lat, en.lng);
+        if (d <= 60 && d < bestD) { best = en; bestD = d; }
+      }
+      if (best) { used.add(best.id); matches.push({ pt, en: best }); }
+    }
+    if (!matches.length) {
+      await appAlert(points.length + ' foto\'s gevonden in het bestand, maar geen enkele past bij een registratie zonder foto in dit jachtgebied (zelfde datum, uur en plaats). Zit je in het juiste jachtgebied?');
+      return;
+    }
+    if (!(await appConfirm(points.length + ' foto\'s in het bestand, ' + matches.length + ' passen bij een bestaande registratie. Nu ophalen en koppelen?'))) return;
+    let ok = 0, fail = 0, firstErr = '';
+    for (let i = 0; i < matches.length; i++) {
+      const { en, pt } = matches[i];
+      toast('Foto ' + (i + 1) + ' van ' + matches.length + '…', 3000);
+      try {
+        const blob = await fetchPhotoBlob(pt.url);
+        en.photo = await compressImage(blob, 1280, 0.75);
+        en.updated_at = Date.now(); en._dirty = true;
+        await idbPut('entries', en);
+        if (entryMarkers[en.id]) { map.removeLayer(entryMarkers[en.id]); delete entryMarkers[en.id]; }
+        addEntryMarker(en);
+        ok++;
+      } catch (err) {
+        fail++; if (!firstErr) firstErr = String(err && err.message || err);
+        if (ok === 0 && fail >= 3) break; // niets lukt: niet 40 keer opnieuw proberen
+      }
+    }
+    renderWildList();
+    if (ok === 0) {
+      await appAlert('De foto\'s konden niet worden opgehaald (' + firstErr + ').\n\nGoogle laat meestal niet toe dat een andere website zijn foto\'s rechtstreeks ophaalt. Er is niets gewijzigd.');
+      return;
+    }
+    await appAlert(ok + ' foto\'s gekoppeld' + (fail ? ', ' + fail + ' mislukt' : '') + '. Ze worden nu gesynchroniseerd (kan even duren).');
     syncAllStores();
   });
 

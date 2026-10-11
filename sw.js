@@ -1,6 +1,6 @@
 // Jachtlogboek service worker — EERST INTERNET, DAN PAS CACHE.
 // Met bereik krijg je altijd de nieuwste versie; zonder bereik start de app uit de bewaarde kopie.
-const VERSION = '2026-10-11-c';
+const VERSION = '2026-10-11-d';
 const CACHE = 'jlb-' + VERSION;
 const APP = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 const LIBS = [
