@@ -3219,6 +3219,74 @@
     return key ? m[key] : '📍';
   }
 
+  /* ---------- Eigen soort-iconen (witte silhouetten, 24x24) ---------- */
+  // bg = kleur van de speld (voor oogjes en uitsnijdingen)
+  function speciesIconKind(sp) {
+    const s = String(sp || '').toLowerCase();
+    if (s.includes('zwijn') || s.includes('everzwijn') || s.includes('keiler')) return 'zwijn';
+    if (s.includes('hert')) return 'hert';
+    if (s.includes('ree')) return 'ree';
+    if (s.includes('vos')) return 'vos';
+    if (s.includes('konijn')) return 'konijn';
+    if (s.includes('haas')) return 'haas';
+    if (s.includes('fazant')) return 'fazant';
+    if (s.includes('eend')) return 'eend';
+    if (s.includes('duif')) return 'duif';
+    if (/kraai|ekster|gaai|kauw|raaf|patrijs|vogel|gans|snip|kwartel/.test(s)) return 'vogel';
+    return 'overig';
+  }
+  function speciesIconSvg(sp, bg, px) {
+    const k = speciesIconKind(sp);
+    const W = '#fff';
+    let g = '';
+    switch (k) {
+      case 'hert':
+        g = '<g fill="none" stroke="'+W+'" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M9.3 11 C7.5 9 6.8 6.5 6 3"/><path d="M7.6 8.3 L4.3 7.6"/><path d="M6.8 5.6 L4.8 3.4"/><path d="M7.1 6.2 L9 3.6"/>' +
+            '<path d="M14.7 11 C16.5 9 17.2 6.5 18 3"/><path d="M16.4 8.3 L19.7 7.6"/><path d="M17.2 5.6 L19.2 3.4"/><path d="M16.9 6.2 L15 3.6"/></g>' +
+            '<path d="M8.6 11.2 L15.4 11.2 L14 19 L12 21.6 L10 19 Z" fill="'+W+'"/>' +
+            '<ellipse cx="7" cy="12.2" rx="2.4" ry="1.2" transform="rotate(25 7 12.2)" fill="'+W+'"/><ellipse cx="17" cy="12.2" rx="2.4" ry="1.2" transform="rotate(-25 17 12.2)" fill="'+W+'"/>' +
+            '<circle cx="10.4" cy="14" r=".9" fill="'+bg+'"/><circle cx="13.6" cy="14" r=".9" fill="'+bg+'"/>'; break;
+      case 'ree':
+        g = '<g fill="none" stroke="'+W+'" stroke-width="1.7" stroke-linecap="round"><path d="M9.5 10 L8.3 5.5"/><path d="M8.6 7.3 L6.8 6"/><path d="M14.5 10 L15.7 5.5"/><path d="M15.4 7.3 L17.2 6"/></g>' +
+            '<path d="M9 10.5 L15 10.5 L14 18.5 L12 21.2 L10 18.5 Z" fill="'+W+'"/>' +
+            '<ellipse cx="5.8" cy="10.6" rx="3" ry="1.5" transform="rotate(35 5.8 10.6)" fill="'+W+'"/><ellipse cx="18.2" cy="10.6" rx="3" ry="1.5" transform="rotate(-35 18.2 10.6)" fill="'+W+'"/>' +
+            '<circle cx="10.5" cy="13.4" r=".9" fill="'+bg+'"/><circle cx="13.5" cy="13.4" r=".9" fill="'+bg+'"/><circle cx="12" cy="19.4" r=".8" fill="'+bg+'"/>'; break;
+      case 'zwijn':
+        g = '<path d="M3 13.5 C3 9.8 7 8.2 11 8.4 C13 8.5 14.6 8.1 16 8.6 L17.4 6.4 L18.6 9.4 C20.4 10 21.6 11.4 22 13 L22 14.8 L20.2 15.6 L19 14.6 C18.7 15.8 18.5 16.8 18.6 18.6 L16.6 18.6 L16 16 L8.6 16 L8.2 18.6 L6.2 18.6 L6 15.6 C4 15.4 3 14.8 3 13.5Z" fill="'+W+'"/>' +
+            '<path d="M5.2 9.8 L6 6.6 L7.6 8.6 L9 6 L10.4 8.2 L12 6.2 L13.2 8.4 Z" fill="'+W+'"/>' +
+            '<circle cx="18.2" cy="11.6" r=".9" fill="'+bg+'"/><circle cx="21" cy="13.6" r=".6" fill="'+bg+'"/><path d="M19.6 15 L20.6 12.8" stroke="'+bg+'" stroke-width="1" stroke-linecap="round"/>'; break;
+      case 'vos':
+        g = '<path d="M4.2 2.8 L10 8 L14 8 L19.8 2.8 L19 12.5 L12 21.6 L5 12.5 Z" fill="'+W+'"/>' +
+            '<circle cx="9.3" cy="11.6" r=".95" fill="'+bg+'"/><circle cx="14.7" cy="11.6" r=".95" fill="'+bg+'"/><circle cx="12" cy="19.3" r="1.1" fill="'+bg+'"/>'; break;
+      case 'haas':
+        g = '<ellipse cx="8.8" cy="6.2" rx="2" ry="6.2" transform="rotate(-10 8.8 6.2)" fill="'+W+'"/><ellipse cx="15.2" cy="6.2" rx="2" ry="6.2" transform="rotate(10 15.2 6.2)" fill="'+W+'"/>' +
+            '<ellipse cx="12" cy="16" rx="6.2" ry="5.6" fill="'+W+'"/><circle cx="9.7" cy="15" r=".95" fill="'+bg+'"/><circle cx="14.3" cy="15" r=".95" fill="'+bg+'"/><circle cx="12" cy="17.6" r=".9" fill="'+bg+'"/>'; break;
+      case 'konijn':
+        g = '<ellipse cx="8.8" cy="7.8" rx="2.3" ry="4.8" transform="rotate(-8 8.8 7.8)" fill="'+W+'"/><ellipse cx="15.2" cy="7.8" rx="2.3" ry="4.8" transform="rotate(8 15.2 7.8)" fill="'+W+'"/>' +
+            '<circle cx="12" cy="16" r="6.4" fill="'+W+'"/><circle cx="9.7" cy="15" r=".95" fill="'+bg+'"/><circle cx="14.3" cy="15" r=".95" fill="'+bg+'"/><circle cx="12" cy="17.6" r=".9" fill="'+bg+'"/>'; break;
+      case 'fazant':
+        g = '<path d="M10 12.5 L1.2 19.2 L3.2 20.2 L12 15.6 Z" fill="'+W+'"/><ellipse cx="13" cy="13" rx="6.4" ry="3.9" transform="rotate(-15 13 13)" fill="'+W+'"/>' +
+            '<path d="M16.6 10.4 C17.4 8.8 17.4 7.8 17.4 7" stroke="'+W+'" stroke-width="2.2" stroke-linecap="round" fill="none"/><circle cx="18" cy="6.3" r="2.3" fill="'+W+'"/><path d="M19.8 6.6 L22.4 7.4 L19.8 8.2Z" fill="'+W+'"/>' +
+            '<path d="M12 16.6 L11 20.4 M14.4 16.4 L14.2 20.4" stroke="'+W+'" stroke-width="1.3" stroke-linecap="round"/><circle cx="18.4" cy="6" r=".7" fill="'+bg+'"/>'; break;
+      case 'eend':
+        g = '<path d="M2 11.2 L4.4 12.2 L4 13.6Z" fill="'+W+'"/><path d="M3.4 13.4 C3.6 17.4 8 19.6 12.8 19.6 C17.6 19.6 19.8 17 19.8 13.6 C19.8 11.6 18 10.6 16.6 10.6 L14.4 11.4 C12 12.4 6 12.4 3.4 13.4Z" fill="'+W+'"/>' +
+            '<path d="M15.8 11.6 C15 9 15.6 7.8 16.6 6.8" stroke="'+W+'" stroke-width="3" stroke-linecap="round" fill="none"/><circle cx="17" cy="6.6" r="3" fill="'+W+'"/><path d="M19.4 6.4 L23 7.6 L19.6 9Z" fill="'+W+'"/>' +
+            '<circle cx="17.3" cy="5.9" r=".8" fill="'+bg+'"/><path d="M7 15 C9 14.4 11.4 14.6 13 15.8" stroke="'+bg+'" stroke-width="1.1" fill="none" stroke-linecap="round"/>'; break;
+      case 'duif':
+        g = '<path d="M6 13.4 L1.2 17 L6.4 17.6Z" fill="'+W+'"/><ellipse cx="11.6" cy="13.2" rx="6.8" ry="5" transform="rotate(-10 11.6 13.2)" fill="'+W+'"/>' +
+            '<circle cx="17.6" cy="8.6" r="3" fill="'+W+'"/><path d="M20 8.2 L22.4 8.8 L20 9.8Z" fill="'+W+'"/><circle cx="18" cy="8" r=".8" fill="'+bg+'"/>' +
+            '<path d="M7.6 12.4 C10 11.6 13 12.2 14.4 14" stroke="'+bg+'" stroke-width="1.1" fill="none" stroke-linecap="round"/><path d="M11 18 L10.4 21 M13.6 17.8 L13.6 21" stroke="'+W+'" stroke-width="1.3" stroke-linecap="round"/>'; break;
+      case 'vogel':
+        g = '<path d="M5.5 13 L1.6 16.6 L6 17Z" fill="'+W+'"/><ellipse cx="11.6" cy="13" rx="6.6" ry="4.6" transform="rotate(-10 11.6 13)" fill="'+W+'"/>' +
+            '<circle cx="17.4" cy="8.8" r="3" fill="'+W+'"/><path d="M19.6 8 L23.2 9.2 L19.8 10.2Z" fill="'+W+'"/><circle cx="17.9" cy="8.2" r=".8" fill="'+bg+'"/><path d="M11 17.4 L10.4 20.6 M13.6 17.2 L13.6 20.6" stroke="'+W+'" stroke-width="1.3" stroke-linecap="round"/>'; break;
+      default: // pootafdruk
+        g = '<ellipse cx="12" cy="16.4" rx="5" ry="4" fill="'+W+'"/><circle cx="5.8" cy="11.4" r="2.1" fill="'+W+'"/><circle cx="9.6" cy="6.8" r="2.1" fill="'+W+'"/><circle cx="14.4" cy="6.8" r="2.1" fill="'+W+'"/><circle cx="18.2" cy="11.4" r="2.1" fill="'+W+'"/>';
+    }
+    const z = px || 20;
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="' + z + '" height="' + z + '" style="display:block;">' + g + '</svg>';
+  }
+
   /* ---------- Kleur per jaar (icoontjes op kaart + jaarfilter-chips) ---------- */
   const YEAR_COLOR_PALETTE = ['#d94f04','#0077b6','#2a9d8f','#9b5de5','#e63946','#ffb703','#457b9d','#6a994e','#bc6c25','#b5179e'];
   function yearColor(year) {
@@ -3301,7 +3369,7 @@
       ? '<span style="position:absolute;bottom:-2px;right:-2px;background:#fff;color:' + col + ';border:1px solid ' + col + ';border-radius:50%;width:9px;height:9px;font-size:7px;font-weight:700;line-height:8px;text-align:center;transform:rotate(45deg);">' + subtypeSym + '</span>'
       : '';
     const icon = L.divIcon({
-      html: '<div style="position:relative;background:' + col + ';border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);width:' + markerSizePx + 'px;height:' + markerSizePx + 'px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:' + Math.round(markerSizePx * 0.34) + 'px;">' + speciesEmoji(entry.species) + '</span>' + badgeHtml + '</div>',
+      html: '<div style="position:relative;background:' + col + ';border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);width:' + markerSizePx + 'px;height:' + markerSizePx + 'px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);display:block;line-height:0;">' + speciesIconSvg(entry.species, col, Math.round(markerSizePx * 0.74)) + '</span>' + badgeHtml + '</div>',
       className:'', iconSize:[markerSizePx,markerSizePx], iconAnchor:[Math.round(markerSizePx/2), Math.round(markerSizePx*0.93)]
     });
     const marker = L.marker([entry.lat, entry.lng], { icon, draggable: false }).addTo(map);
@@ -3773,7 +3841,7 @@
       card.className = 'list-card';
       const thumbHtml = entry.photo
         ? '<img class="thumb" src="' + URL.createObjectURL(entry.photo) + '">'
-        : '<div class="thumb" style="background:' + yearColor(entryYear(entry)) + ';color:#fff;">' + speciesEmoji(entry.species) + '</div>';
+        : '<div class="thumb" style="background:' + yearColor(entryYear(entry)) + ';color:#fff;display:flex;align-items:center;justify-content:center;">' + speciesIconSvg(entry.species, yearColor(entryYear(entry)), 30) + '</div>';
       const subtypeTag = entry.subtype ? ' <span style="font-weight:500;color:var(--ink-soft);">· ' + subtypeDisplay(entry.subtype) + '</span>' : '';
       card.innerHTML = thumbHtml +
         '<div class="info">' +
