@@ -557,7 +557,10 @@
   </div>
 
   <div class="gebied-quick-switch" id="gebiedQuickSwitch" style="display:none;">
-    <div class="hint" style="color:var(--parchment-dim); margin-bottom:8px;">Wissel van jachtgebied</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+      <div class="hint" style="color:var(--parchment-dim);margin:0;">Wissel van jachtgebied</div>
+      <button class="icon-btn" id="btnCloseQuickSwitch" aria-label="Sluiten" style="flex-shrink:0;width:34px;height:34px;">✕</button>
+    </div>
     <div id="gebiedQuickList"></div>
     <button class="btn btn-outline" id="btnQuickManageGebieden" style="margin-top:8px;">➕ Nieuw jachtgebied / toegang vragen</button>
     <div id="accountInfoSub" style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.15);font-size:11.5px;color:var(--parchment-dim);">—</div>
@@ -735,6 +738,7 @@
   <!-- Add wild sheet -->
   <div class="sheet" id="sheetWild">
     <div class="sheet-handle"></div>
+    <div class="back-row" style="justify-content:flex-end;"><button class="icon-btn sheet-close-x" aria-label="Sluiten">✕</button></div>
     <h2 id="wildSheetTitle">Wild registreren</h2>
     <div class="subtitle" id="wildSheetSubtitle">Positie wordt automatisch opgehaald, of kies zelf een plek voor historische invoer.</div>
 
@@ -802,6 +806,7 @@
   <!-- Add marker sheet -->
   <div class="sheet" id="sheetMarker">
     <div class="sheet-handle"></div>
+    <div class="back-row" style="justify-content:flex-end;"><button class="icon-btn sheet-close-x" aria-label="Sluiten">✕</button></div>
     <h2>Markering toevoegen</h2>
     <div class="subtitle">Voor hoogzit, voederplaats, parking en meer.</div>
 
@@ -939,6 +944,7 @@
   <!-- Tableau species config sheet -->
   <div class="sheet" id="sheetTableauSpecies">
     <div class="sheet-handle"></div>
+    <div class="back-row" style="justify-content:flex-end;"><button class="icon-btn sheet-close-x" aria-label="Sluiten">✕</button></div>
     <h2>Soorten voor afschot / tableau</h2>
     <div class="subtitle">Kies welke soorten in jouw jachtplan zitten — enkel die verschijnen in het invulformulier.</div>
     <div class="chip-grid" id="tableauSpeciesConfigGrid" style="grid-template-columns:repeat(2,1fr);"></div>
@@ -958,6 +964,7 @@
   <!-- Tableau add-entry sheet -->
   <div class="sheet" id="sheetTableauAdd">
     <div class="sheet-handle"></div>
+    <div class="back-row" style="justify-content:flex-end;"><button class="icon-btn sheet-close-x" aria-label="Sluiten">✕</button></div>
     <h2>Afschot / Tableau invullen</h2>
     <div class="subtitle">Aantallen kleinwild van de jachtdag</div>
     <div class="field">
@@ -1609,7 +1616,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-l'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-m'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
@@ -1979,6 +1986,12 @@
     } else {
       panel.style.display = 'none';
     }
+  });
+  document.getElementById('btnCloseQuickSwitch').addEventListener('click', () => { document.getElementById('gebiedQuickSwitch').style.display = 'none'; });
+  // Tik naast het paneel = sluiten
+  document.addEventListener('click', ev => {
+    const panel = document.getElementById('gebiedQuickSwitch');
+    if (panel && panel.style.display === 'block' && !ev.target.closest('#gebiedQuickSwitch') && !ev.target.closest('#gebiedNameDisplay')) panel.style.display = 'none';
   });
   document.getElementById('btnQuickManageGebieden').addEventListener('click', async () => {
     document.getElementById('gebiedQuickSwitch').style.display = 'none';
@@ -3674,8 +3687,9 @@
     if (btn) btn.classList.toggle('on', getWildYearFilter() !== 'all');
     if (btn) btn.title = 'Wild tonen: ' + yearFilterLabel();
     if (!pop) return;
-    pop.innerHTML = '<div class="yp-t">Geschoten wild tonen op de kaart</div><div class="chip-row">' + yearChipsHtml() + '</div>';
+    pop.innerHTML = '<div class="yp-t" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>Geschoten wild tonen op de kaart</span><button type="button" id="btnCloseYearPop" aria-label="Sluiten" style="border:none;background:rgba(0,0,0,.08);width:28px;height:28px;border-radius:50%;font-size:14px;flex-shrink:0;">✕</button></div><div class="chip-row">' + yearChipsHtml() + '</div>';
     bindYearChips(pop);
+    const cx = pop.querySelector('#btnCloseYearPop'); if (cx) cx.addEventListener('click', () => { pop.style.display = 'none'; });
   }
   document.getElementById('btnYear').addEventListener('click', () => {
     const pop = document.getElementById('yearPop');
