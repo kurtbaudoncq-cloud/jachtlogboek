@@ -1605,7 +1605,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-f'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-g'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
@@ -3624,7 +3624,7 @@
     if (entry.note) popupHtml += '<br><em>' + escapeHtml(entry.note) + '</em>';
     if (entry.photo) {
       const url = URL.createObjectURL(entry.photo);
-      popupHtml = '<img src="' + url + '" style="width:160px;border-radius:8px;display:block;margin-bottom:6px;">' + popupHtml;
+      popupHtml = '<img src="' + url + '" onclick="window.__showWildDetail(\'' + entry.id + '\',true)" style="width:160px;border-radius:8px;display:block;margin-bottom:2px;cursor:zoom-in;"><div style="font-size:11px;color:#777;margin-bottom:6px;">🔍 Tik op de foto om te vergroten</div>' + popupHtml;
     }
     popupHtml += '<div style="margin-top:6px;display:flex;gap:6px;">' +
       '<button type="button" onclick="window.__openWildEdit(\'' + entry.id + '\')" style="padding:6px 10px;border:none;border-radius:6px;background:' + col + ';color:#fff;font-weight:600;">✏️ Bewerken</button>' +
@@ -3634,6 +3634,75 @@
     entryMarkers[entry.id] = marker;
     if (!entryVisibleUnderFilter(entry)) map.removeLayer(marker);
   }
+
+  /* ---------- Foto vergroten / registratie openen ---------- */
+  (function () {
+    const css = document.createElement('style');
+    css.textContent =
+      '#wildLb{position:fixed;inset:0;z-index:20000;background:rgba(10,18,12,.94);display:none;flex-direction:column;color:#fff;}' +
+      '#wildLb.show{display:flex;}' +
+      '#wildLb .lb-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 8px;}' +
+      '#wildLb .lb-title{font-weight:700;font-size:16px;}' +
+      '#wildLb .lb-sub{font-size:12px;opacity:.8;margin-top:2px;}' +
+      '#wildLb .lb-x{border:none;background:rgba(255,255,255,.16);color:#fff;font-size:20px;width:40px;height:40px;border-radius:50%;flex:none;}' +
+      '#wildLb .lb-scroll{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;align-items:center;justify-content:center;}' +
+      '#wildLb .lb-scroll.zoomed{display:block;}' +
+      '#wildLb img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in;display:block;margin:0 auto;}' +
+      '#wildLb .lb-scroll.zoomed img{max-width:none;max-height:none;width:260%;cursor:zoom-out;}' +
+      '#wildLb .lb-hint{text-align:center;font-size:12px;opacity:.7;padding:4px;}' +
+      '#wildLb .lb-note{padding:8px 16px;font-size:14px;line-height:1.4;max-height:20vh;overflow:auto;}' +
+      '#wildLb .lb-bar{display:flex;gap:8px;padding:8px 14px calc(env(safe-area-inset-bottom,0px) + 12px);}' +
+      '#wildLb .lb-bar button{flex:1;padding:12px;border:none;border-radius:10px;font-weight:600;font-size:15px;background:rgba(255,255,255,.18);color:#fff;}' +
+      '#wildLb .lb-bar button.pri{background:#d9650f;}' +
+      '#wildLb .lb-empty{flex:1;display:flex;align-items:center;justify-content:center;opacity:.7;padding:20px;text-align:center;}';
+    document.head.appendChild(css);
+    const box = document.createElement('div');
+    box.id = 'wildLb';
+    box.innerHTML =
+      '<div class="lb-top"><div><div class="lb-title" id="lbTitle"></div><div class="lb-sub" id="lbSub"></div></div><button class="lb-x" id="lbClose" aria-label="Sluiten">✕</button></div>' +
+      '<div class="lb-scroll" id="lbScroll"><img id="lbImg" alt=""></div>' +
+      '<div class="lb-empty" id="lbEmpty" style="display:none;">Geen foto bij deze registratie.</div>' +
+      '<div class="lb-hint" id="lbHint">Tik op de foto om te vergroten of terug normaal te zetten</div>' +
+      '<div class="lb-note" id="lbNote"></div>' +
+      '<div class="lb-bar"><button id="lbMap">📍 Op kaart</button><button id="lbEdit" class="pri">✏️ Bewerken</button></div>';
+    document.body.appendChild(box);
+    const img = box.querySelector('#lbImg'), sc = box.querySelector('#lbScroll');
+    let curUrl = null, curEntry = null;
+    function close() {
+      box.classList.remove('show'); sc.classList.remove('zoomed');
+      if (curUrl) { URL.revokeObjectURL(curUrl); curUrl = null; }
+      img.removeAttribute('src'); curEntry = null;
+    }
+    box.querySelector('#lbClose').addEventListener('click', close);
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && box.classList.contains('show')) close(); });
+    img.addEventListener('click', () => { sc.classList.toggle('zoomed'); sc.scrollTo(0, 0); });
+    box.querySelector('#lbMap').addEventListener('click', () => {
+      const en = curEntry; close(); if (!en) return;
+      closeAllSheets(); map.setView([en.lat, en.lng], 17);
+      if (entryMarkers[en.id]) entryMarkers[en.id].openPopup();
+    });
+    box.querySelector('#lbEdit').addEventListener('click', () => {
+      const en = curEntry; close(); if (!en) return;
+      closeAllSheets(); openWildEditSheet(en);
+    });
+    window.__showWildDetail = function (id) {
+      const en = entries.find(e => e.id === id);
+      if (!en) return;
+      curEntry = en;
+      if (curUrl) { URL.revokeObjectURL(curUrl); curUrl = null; }
+      sc.classList.remove('zoomed');
+      const hasPhoto = !!en.photo;
+      sc.style.display = hasPhoto ? '' : 'none';
+      box.querySelector('#lbHint').style.display = hasPhoto ? '' : 'none';
+      box.querySelector('#lbEmpty').style.display = hasPhoto ? 'none' : 'flex';
+      if (hasPhoto) { curUrl = URL.createObjectURL(en.photo); img.src = curUrl; }
+      box.querySelector('#lbTitle').textContent = en.species + (en.subtype ? ' · ' + subtypeDisplay(en.subtype) : '');
+      box.querySelector('#lbSub').textContent = fmtDateShort(en.timestamp) + ' · ' + en.lat.toFixed(4) + ', ' + en.lng.toFixed(4);
+      box.querySelector('#lbNote').textContent = en.note || '';
+      box.classList.add('show');
+    };
+  })();
+
   window.__openWildEdit = function(id) {
     const en = entries.find(e => e.id === id);
     if (en) { closeAllSheets(); openWildEditSheet(en); }
@@ -4094,11 +4163,14 @@
           '<div class="top"><span class="title">' + entry.species + subtypeTag + '</span></div>' +
           '<div class="meta">' + fmtDateShort(entry.timestamp) + ' · ' + entry.lat.toFixed(4) + ', ' + entry.lng.toFixed(4) + '</div>' +
           (entry.note ? '<div class="note">' + escapeHtml(entry.note) + '</div>' : '') +
+          '<div class="meta" style="color:var(--accent,#d9650f);">' + (entry.photo ? '🔍 Tik om foto te bekijken' : 'Tik om te openen') + '</div>' +
         '</div>' +
         '<div class="list-actions">' +
           '<button data-act="goto" title="Toon op kaart">📍</button>' +
           '<button data-act="del" title="Verwijder">🗑️</button>' +
         '</div>';
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', ev => { if (ev.target.closest('button')) return; window.__showWildDetail(entry.id); });
       card.querySelector('[data-act=goto]').addEventListener('click', () => {
         closeAllSheets(); map.setView([entry.lat, entry.lng], 17);
         if (entryMarkers[entry.id]) entryMarkers[entry.id].openPopup();
