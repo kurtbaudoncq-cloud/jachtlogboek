@@ -259,7 +259,11 @@
     color:var(--ink-soft); font-size:13px; cursor:pointer; background:#fbf9f3;
   }
   .photo-preview{ position:relative; border-radius:12px; overflow:hidden; }
-  .photo-preview img{ width:100%; display:block; max-height:260px; object-fit:cover; }
+  .photo-preview img{ width:100%; display:block; max-height:260px; object-fit:contain; background:#111; }
+  .photo-preview .rot{
+    position:absolute; bottom:8px; background:rgba(16,28,19,.75); color:#fff;
+    border:none; width:40px; height:40px; border-radius:50%; font-size:22px; line-height:40px; padding:0; cursor:pointer; right:8px;
+  }
   .photo-preview .remove{
     position:absolute; top:8px; right:8px; background:rgba(16,28,19,.75); color:#fff;
     border:none; width:30px; height:30px; border-radius:50%; font-size:15px; cursor:pointer;
@@ -1605,7 +1609,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-h'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-i'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
@@ -3351,12 +3355,7 @@
     document.getElementById('wildNote').value = entry.note || '';
     document.getElementById('wildDate').value = new Date(entry.timestamp).toISOString().slice(0, 10);
     if (entry.photo) {
-      const url = URL.createObjectURL(entry.photo);
-      photoDrop.className = 'photo-preview';
-      photoDrop.innerHTML = '<img src="' + url + '"><button class="remove" type="button">✕</button>';
-      photoDrop.querySelector('.remove').addEventListener('click', (ev) => {
-        ev.stopPropagation(); pendingPhotoBlob = null; editingEntryPhotoCleared = true; resetPhotoUi();
-      });
+      renderPhotoPreview(entry.photo);
     } else {
       resetPhotoUi();
     }
@@ -3387,7 +3386,49 @@
   const photoDrop = document.getElementById('photoDrop');
   const filePhoto = document.getElementById('filePhoto');
   function resetPhotoUi() { photoDrop.className = 'photo-drop'; photoDrop.innerHTML = '📷 Foto toevoegen (camera of bestand)'; filePhoto.value = ''; }
-  photoDrop.addEventListener('click', () => filePhoto.click());
+  function currentPhotoBlob() {
+    if (pendingPhotoBlob) return pendingPhotoBlob;
+    if (editingEntryId && !editingEntryPhotoCleared) { const en = entries.find(e => e.id === editingEntryId); return en && en.photo instanceof Blob ? en.photo : null; }
+    return null;
+  }
+  function rotateBlob(blob, deg) {
+    return new Promise((res, rej) => {
+      const img = new Image(), url = URL.createObjectURL(blob);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const w = img.naturalWidth, h = img.naturalHeight, swap = (deg % 180 !== 0);
+        const c = document.createElement('canvas');
+        c.width = swap ? h : w; c.height = swap ? w : h;
+        const ctx = c.getContext('2d');
+        ctx.translate(c.width / 2, c.height / 2);
+        ctx.rotate(deg * Math.PI / 180);
+        ctx.drawImage(img, -w / 2, -h / 2);
+        c.toBlob(b => b ? res(b) : rej(new Error('draaien mislukt')), 'image/jpeg', 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('foto onleesbaar')); };
+      img.src = url;
+    });
+  }
+  function renderPhotoPreview(blob) {
+    const url = URL.createObjectURL(blob);
+    photoDrop.className = 'photo-preview';
+    photoDrop.innerHTML = '<img src="' + url + '"><button class="remove" type="button">✕</button>' +
+      '<button class="rot" type="button" aria-label="Foto 90 graden draaien" title="Foto 90° draaien">⟳</button>';
+    photoDrop.querySelector('.remove').addEventListener('click', (ev) => {
+      ev.stopPropagation(); pendingPhotoBlob = null; editingEntryPhotoCleared = true; resetPhotoUi();
+    });
+    const doRot = async (ev, deg) => {
+      ev.stopPropagation();
+      const cur = currentPhotoBlob(); if (!cur) return;
+      try {
+        pendingPhotoBlob = await rotateBlob(cur, deg);
+        editingEntryPhotoCleared = false;
+        renderPhotoPreview(pendingPhotoBlob);
+      } catch (err) { toast('Foto draaien mislukt'); }
+    };
+    photoDrop.querySelector('.rot').addEventListener('click', ev => doRot(ev, 90));
+  }
+  photoDrop.addEventListener('click', () => { if (photoDrop.classList.contains('photo-preview')) return; filePhoto.click(); });
   filePhoto.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -3395,12 +3436,7 @@
     pendingPhotoBlob = await compressImage(file);
     filePhoto.value = '';
     editingEntryPhotoCleared = false;
-    const url = URL.createObjectURL(pendingPhotoBlob);
-    photoDrop.className = 'photo-preview';
-    photoDrop.innerHTML = '<img src="' + url + '"><button class="remove" type="button">✕</button>';
-    photoDrop.querySelector('.remove').addEventListener('click', (ev) => {
-      ev.stopPropagation(); pendingPhotoBlob = null; editingEntryPhotoCleared = true; resetPhotoUi();
-    });
+    renderPhotoPreview(pendingPhotoBlob);
   });
 
   document.getElementById('btnSaveWild').addEventListener('click', async () => {
