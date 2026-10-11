@@ -104,7 +104,7 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     font-size:11px; font-weight:800; letter-spacing:.02em;
     box-shadow:0 6px 18px rgba(217,79,4,.55);
-    cursor:pointer; transform:translateY(-4px);
+    cursor:pointer; position:absolute; left:50%; bottom:calc(14px + var(--safe-bottom)); transform:translate(-50%,-4px);
   }
   .fab-main .plus{ font-size:26px; line-height:1; margin-bottom:1px; }
   .fab-main:active{ background:var(--blaze-dark); }
@@ -1609,7 +1609,7 @@
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
   /* ---------- App-versie, offline-opslag (service worker) en "Ververs de app" ---------- */
-  const APP_VERSION = '2026-10-11-k'; // gelijk houden met VERSION in sw.js
+  const APP_VERSION = '2026-10-11-l'; // gelijk houden met VERSION in sw.js
   (function(){ const el = document.getElementById('appVersionText'); if (el) el.textContent = APP_VERSION; })();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch (e) {} }).catch(e => console.warn('sw', e));
