@@ -375,6 +375,8 @@
   #yearPop .yp-t{ font-size:12px; font-weight:800; margin-bottom:8px; }
   #yearPop .chip-row{ display:flex; flex-wrap:wrap; gap:6px; }
   .float-btn.on{ outline:3px solid var(--blaze); }
+  #syncBadge{ position:absolute; top:-6px; right:-6px; min-width:20px; height:20px; padding:0 5px; border-radius:10px; background:var(--blaze); color:#fff; font-size:11px; font-weight:800; line-height:20px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.5); }
+  #syncBadge.err{ background:#c0142b; }
   .sun-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
   .sun-card{ background:#fff; border:1px solid var(--paper-line); border-radius:12px; padding:12px; }
   .sun-card .label{ font-size:11px; font-weight:700; color:var(--ink-soft); }
@@ -530,7 +532,7 @@
 
   <div class="topbar">
     <div class="topbar-actions-left">
-      <button class="icon-btn" id="btnMenu" title="Menu">☰</button>
+      <button class="icon-btn" id="btnMenu" title="Menu" style="position:relative;">☰<span id="syncBadge" style="display:none;"></span></button>
     </div>
     <div class="brand">
       <span class="app-label">Jachtlogboek</span>
@@ -1550,7 +1552,17 @@
     return ['entries','markers','tracks','tableaus'].reduce((n, s) =>
       n + syncArrayFor(s).filter(r => r._dirty).length + getPendingDeletes(s).length, 0);
   }
+  function updateSyncBadge() {
+    const b = document.getElementById('syncBadge');
+    if (!b) return;
+    const n = pendingSyncCount();
+    b.style.display = n > 0 ? 'block' : 'none';
+    b.textContent = n > 99 ? '99+' : String(n);
+    b.classList.toggle('err', !!lastSyncError);
+    b.title = n + ' registratie(s) wachten om naar de server te gaan';
+  }
   function updateSyncStatusUi() {
+    updateSyncBadge();
     const el = document.getElementById('syncStatusText');
     if (!el) return;
     if (syncing) { el.textContent = '🔄 Bezig met synchroniseren...'; return; }
@@ -1574,7 +1586,19 @@
   }
   window.addEventListener('online', () => syncAllStores());
   window.addEventListener('offline', () => updateSyncStatusUi());
-  setInterval(() => { if (document.visibilityState === 'visible') syncAllStores(); }, 120000);
+  // Veldgebruik: vaak geen bereik. Wachtende wijzigingen worden elke 20 s opnieuw geprobeerd,
+  // zodra de app weer zichtbaar wordt, en zodra er internet is. Zonder wachtende wijzigingen: elke 2 min.
+  let lastSyncTry = 0;
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    const waiting = pendingSyncCount() > 0;
+    if (waiting || Date.now() - lastSyncTry > 120000) { lastSyncTry = Date.now(); syncAllStores(); }
+  }, 20000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { lastSyncTry = Date.now(); syncAllStores(); } });
+  window.addEventListener('pageshow', () => { syncAllStores(); });
+  window.addEventListener('focus', () => { if (pendingSyncCount() > 0) syncAllStores(); });
+  // Na elke lokale opslag meteen de teller tonen, ook als er geen bereik is.
+  setInterval(updateSyncBadge, 3000);
 
   // Eenmalige migratie: oude lokale data (numerieke id's, geen gebied_id) krijgt een
   // vaste cloud-id en wordt gekoppeld aan het huidige jachtgebied.
